@@ -1,5 +1,8 @@
 # Phase 1: cross-backend comparison
 
+The raw evidence records referenced throughout this report are at
+[`docs/phase1-runs.jsonl`](phase1-runs.jsonl), a copy of `runs/2026-08-23.jsonl`.
+
 Manual, exploratory comparison of Sylvae's backends against the two real skills
 (`skills/summarize-diff`, `skills/disk-report`). This is the actual phase-1
 experiment result the pipeline (Tasks 1-9, 21 passing tests) was built to

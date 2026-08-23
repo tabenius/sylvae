@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -40,3 +42,18 @@ def test_main_rejects_unknown_backend_before_running():
     with pytest.raises(SystemExit) as exc_info:
         main(["run", "skills/summarize-diff", "--backend", "not-real", "--input", "hi"])
     assert exc_info.value.code == 2
+
+
+def test_main_end_to_end_via_shellout(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    repo_root = Path(__file__).parent.parent
+    skill_path = repo_root / "skills" / "summarize-diff"
+
+    exit_code = main(["run", str(skill_path), "--backend", "shellout", "--input", "some text"])
+
+    assert exit_code == 1
+    runs_files = list((tmp_path / "runs").glob("*.jsonl"))
+    assert len(runs_files) == 1
+    record = json.loads(runs_files[0].read_text().strip())
+    assert record["status"] == "unavailable"
+    assert record["skill"] == "summarize-diff"

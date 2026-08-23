@@ -19,7 +19,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         record = run_skill(args.skill_path, args.backend, args.input)
-        print(record.output)
+        if record.output:
+            print(record.output)
         if record.status != "ok":
             print(f"[{record.status}] skill run did not complete successfully", file=sys.stderr)
             return 1

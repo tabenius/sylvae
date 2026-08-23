@@ -35,5 +35,5 @@ class OllamaBackend:
                 status="failed", error=str(exc),
             )
 
-        output = response["choices"][0]["message"]["content"]
+        output = response["choices"][0]["message"].get("content") or ""
         return BackendResult(output=output, model=self.model, duration_ms=elapsed_ms(start), status="ok")

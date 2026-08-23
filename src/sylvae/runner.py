@@ -4,12 +4,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sylvae.backends.anthropic_backend import AnthropicBackend
+from sylvae.backends.base import Backend
 from sylvae.backends.ollama_backend import OllamaBackend
 from sylvae.backends.shellout_backend import ShelloutBackend
 from sylvae.evidence import EvidenceRecord, append_evidence
 from sylvae.loader import Skill, load_skill
 
-BACKENDS = {
+BACKENDS: dict[str, type[Backend]] = {
     "anthropic": AnthropicBackend,
     "ollama": OllamaBackend,
     "shellout": ShelloutBackend,
@@ -51,7 +52,7 @@ def run_skill(
         output=result.output,
         duration_ms=result.duration_ms,
         status=result.status,
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     )
     append_evidence(record, runs_dir=runs_dir)
     return record
