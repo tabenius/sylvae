@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.40",
     "litellm>=1.50",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
