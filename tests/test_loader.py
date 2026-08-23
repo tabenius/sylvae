@@ -5,6 +5,7 @@ import pytest
 from sylvae.loader import Skill, SkillLoadError, load_skill
 
 FIXTURE = Path(__file__).parent.parent / "skills" / "summarize-diff"
+DISK_REPORT_FIXTURE = Path(__file__).parent.parent / "skills" / "disk-report"
 
 
 def test_load_skill_parses_frontmatter_and_body():
@@ -30,3 +31,10 @@ def test_load_skill_missing_frontmatter_raises(tmp_path):
 
     with pytest.raises(SkillLoadError):
         load_skill(bad)
+
+
+def test_load_skill_disk_report_fixture():
+    skill = load_skill(DISK_REPORT_FIXTURE)
+
+    assert skill.slug == "disk-report"
+    assert "85%" in skill.instructions
