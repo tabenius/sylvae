@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from sylvae.backends.base import BackendResult
-from sylvae.runner import BACKENDS, build_prompt, resolve_input, run_skill
+from sylvae.runner import BACKENDS, build_prompt, resolve_backend, resolve_input, run_skill
 from sylvae.loader import Skill
 
 SKILL_PATH = Path(__file__).parent.parent / "skills" / "summarize-diff"
@@ -88,3 +88,49 @@ def test_run_skill_threads_backend_error_into_evidence_record(tmp_path, monkeypa
 
     assert record.status == "unavailable"
     assert record.error == "model 'x' not found on Ollama server — run `ollama pull x`"
+
+
+def test_resolve_backend_passes_through_explicit_choice():
+    skill = Skill(slug="s", name="s", description="d", instructions="i", path=Path("."), tier="cheap")
+
+    assert resolve_backend(skill, "anthropic") == "anthropic"
+
+
+def test_resolve_backend_routes_cheap_tier_to_ollama():
+    skill = Skill(slug="s", name="s", description="d", instructions="i", path=Path("."), tier="cheap")
+
+    assert resolve_backend(skill, "auto") == "ollama"
+
+
+def test_resolve_backend_routes_frontier_tier_to_anthropic():
+    skill = Skill(slug="s", name="s", description="d", instructions="i", path=Path("."), tier="frontier")
+
+    assert resolve_backend(skill, "auto") == "anthropic"
+
+
+def test_resolve_backend_defaults_missing_tier_to_anthropic():
+    skill = Skill(slug="s", name="s", description="d", instructions="i", path=Path("."), tier=None)
+
+    assert resolve_backend(skill, "auto") == "anthropic"
+
+
+def test_run_skill_auto_routes_cheap_tier_skill_to_ollama(tmp_path, monkeypatch):
+    fake_ollama = MagicMock()
+    fake_ollama.run.return_value = BackendResult(
+        output="cheap answer", model="ollama/mistral:latest", duration_ms=5, status="ok"
+    )
+    monkeypatch.setitem(BACKENDS, "ollama", MagicMock(return_value=fake_ollama))
+
+    skill_dir = tmp_path / "cheap-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("---\nname: cheap-skill\ndescription: d\ntier: cheap\n---\nbody")
+
+    record = run_skill(skill_dir, "auto", "some input", runs_dir=tmp_path / "runs")
+
+    assert record.backend == "ollama"
+    assert record.output == "cheap answer"
+
+
+def test_run_skill_rejects_unknown_explicit_backend_without_touching_filesystem(tmp_path):
+    with pytest.raises(ValueError):
+        run_skill(Path("/does/not/exist"), "not-a-real-backend", "input", runs_dir=tmp_path)

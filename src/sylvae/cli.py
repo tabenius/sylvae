@@ -12,7 +12,7 @@ def main(argv: list[str] | None = None) -> int:
 
     run_parser = subparsers.add_parser("run")
     run_parser.add_argument("skill_path")
-    run_parser.add_argument("--backend", required=True, choices=sorted(BACKENDS))
+    run_parser.add_argument("--backend", required=True, choices=sorted(BACKENDS) + ["auto"])
     run_parser.add_argument("--input", required=True)
     run_parser.add_argument(
         "--model",

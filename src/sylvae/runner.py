@@ -28,6 +28,21 @@ def build_prompt(skill: Skill, resolved_input: str) -> str:
     return f"{skill.instructions}\n\n---\n\nTask input:\n{resolved_input}"
 
 
+def resolve_backend(skill: Skill, requested_backend: str) -> str:
+    """Map "auto" to a concrete backend using the skill's declared tier.
+
+    A skill with no declared tier defaults to "frontier" (the safe
+    choice) rather than silently getting downgraded to a cheap backend
+    nobody vetted it against. Any explicit (non-"auto") choice passes
+    through unchanged.
+    """
+    if requested_backend != "auto":
+        return requested_backend
+    if skill.tier == "cheap":
+        return "ollama"
+    return "anthropic"
+
+
 def run_skill(
     skill_path: str | Path,
     backend_name: str,
@@ -35,20 +50,24 @@ def run_skill(
     runs_dir: str | Path = "runs",
     model: str | None = None,
 ) -> EvidenceRecord:
-    if backend_name not in BACKENDS:
-        raise ValueError(f"unknown backend: {backend_name!r} (known: {sorted(BACKENDS)})")
+    if backend_name != "auto" and backend_name not in BACKENDS:
+        raise ValueError(f"unknown backend: {backend_name!r} (known: {sorted(BACKENDS)} + 'auto')")
 
     skill = load_skill(skill_path)
+    resolved_backend_name = resolve_backend(skill, backend_name)
+    if resolved_backend_name not in BACKENDS:
+        raise ValueError(f"unknown backend: {resolved_backend_name!r} (known: {sorted(BACKENDS)})")
+
     resolved_input = resolve_input(raw_input)
     prompt = build_prompt(skill, resolved_input)
 
-    backend = BACKENDS[backend_name]()
+    backend = BACKENDS[resolved_backend_name]()
     run_kwargs = {"model": model} if model else {}
     result = backend.run(prompt, skill, **run_kwargs)
 
     record = EvidenceRecord(
         skill=skill.slug,
-        backend=backend_name,
+        backend=resolved_backend_name,
         model=result.model,
         input_summary=resolved_input[:200],
         output=result.output,

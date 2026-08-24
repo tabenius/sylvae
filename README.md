@@ -22,6 +22,13 @@ the backend expects — for Ollama that means litellm's `ollama/<name>` form:
 
     sylvae run skills/summarize-diff --backend ollama --model ollama/mistral:latest --input path/to/diff.txt
 
+Or let the skill decide: `--backend auto` reads the `tier` a skill declares
+in its `SKILL.md` frontmatter (`tier: cheap` or `tier: frontier`) and routes
+to Ollama or Anthropic accordingly. A skill with no declared tier defaults to
+frontier — the safe choice, not the cheap one:
+
+    sylvae run skills/disk-report --backend auto --input path/to/disk-usage.txt
+
 ## Test
 
     pytest

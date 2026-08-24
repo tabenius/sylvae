@@ -1,6 +1,7 @@
 ---
 name: summarize-diff
 description: Summarize a git diff into a short, plain-language description of what changed and why it likely matters.
+tier: frontier
 ---
 
 You will be given the raw output of `git diff` as task input.

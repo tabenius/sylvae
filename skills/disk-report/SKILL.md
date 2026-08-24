@@ -1,6 +1,7 @@
 ---
 name: disk-report
 description: Read the output of `df -h` and produce a short, actionable report flagging any filesystem at or above 85% used.
+tier: cheap
 ---
 
 You will be given the raw output of `df -h` as task input.

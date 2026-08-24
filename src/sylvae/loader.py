@@ -17,6 +17,7 @@ class Skill:
     description: str
     instructions: str
     path: Path
+    tier: str | None = None  # "cheap" | "frontier" | None (unset)
 
 
 def load_skill(skill_dir: str | Path) -> Skill:
@@ -48,4 +49,5 @@ def load_skill(skill_dir: str | Path) -> Skill:
         description=meta["description"],
         instructions=parts[2].strip(),
         path=path,
+        tier=meta.get("tier"),
     )

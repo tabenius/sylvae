@@ -38,3 +38,23 @@ def test_load_skill_disk_report_fixture():
 
     assert skill.slug == "disk-report"
     assert "85%" in skill.instructions
+
+
+def test_load_skill_tier_defaults_to_none_when_not_declared(tmp_path):
+    skill_dir = tmp_path / "no-tier"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("---\nname: no-tier\ndescription: d\n---\nbody")
+
+    skill = load_skill(skill_dir)
+
+    assert skill.tier is None
+
+
+def test_load_skill_parses_declared_tier(tmp_path):
+    skill_dir = tmp_path / "cheap-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("---\nname: cheap-skill\ndescription: d\ntier: cheap\n---\nbody")
+
+    skill = load_skill(skill_dir)
+
+    assert skill.tier == "cheap"

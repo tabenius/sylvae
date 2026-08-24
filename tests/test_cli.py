@@ -89,3 +89,13 @@ def test_main_omits_model_kwarg_when_flag_not_given(mock_run_skill):
     main(["run", "skills/summarize-diff", "--backend", "anthropic", "--input", "hi"])
 
     assert mock_run_skill.call_args.kwargs.get("model") is None
+
+
+@patch("sylvae.cli.run_skill")
+def test_main_accepts_auto_backend(mock_run_skill):
+    mock_run_skill.return_value = make_record(status="ok")
+
+    exit_code = main(["run", "skills/disk-report", "--backend", "auto", "--input", "hi"])
+
+    assert exit_code == 0
+    assert mock_run_skill.call_args.args[1] == "auto"
