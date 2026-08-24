@@ -119,6 +119,23 @@ model can grant itself.
 `--backend auto` is refused here too, since tier routing could select a
 recursion-risk backend and reopen the hole.
 
+**On transport integrity, and what actually guards it.** The MCP SDK owns
+this, at the file-descriptor level: while serving, it dups the real
+descriptors aside and points fd 0 at the null device and fd 1 at stderr,
+restoring both on exit. A tool doing `print()`, `sys.stdout.write()`, or
+even raw `os.write(1, ...)` cannot corrupt the wire, and a subprocess
+cannot swallow protocol bytes from stdin. That's verified empirically in
+`tests/test_mcp_transport_integrity.py` rather than taken on faith.
+
+Sylvae adds nothing there — nothing at Python level could improve on it.
+What Sylvae does add is a consequence of that design: since fd 1 is
+redirected to stderr, every stray byte lands on stderr, and MCP clients
+routinely capture stderr to a log file. LiteLLM logs completion payloads
+at INFO — for Sylvae that's the skill's *input and output*, arbitrary
+caller-supplied text. So dependency loggers default to `warning`.
+`--dependency-log-level debug` lifts that for troubleshooting and will
+write caller content to disk; the flag's help says so.
+
 ## Test
 
     pytest

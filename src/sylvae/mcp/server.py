@@ -7,10 +7,29 @@ service layer this binds to is testable without it too.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from sylvae.mcp.service import DEFAULT_MCP_TIMEOUT, McpToolService
+
+# Dependency loggers quieted while serving over stdio. Each of these can emit
+# request or response bodies -- for Sylvae that means skill input and output,
+# i.e. arbitrary caller-supplied text. See quiet_dependency_logging() for why
+# that matters more under MCP than it does on the CLI.
+DEPENDENCY_LOGGERS: tuple[str, ...] = (
+    "LiteLLM",    # Ollama path; logs full completion payloads at INFO
+    "litellm",    # same library — some versions use the lowercase logger
+    "httpx",      # HTTP client beneath litellm/anthropic; logs request URLs
+    "httpcore",   # transport beneath httpx; very chatty at DEBUG
+    "anthropic",  # Anthropic SDK
+    "openai",     # pulled in transitively by litellm
+)
+
+# WARNING, not ERROR: genuine problems (retries, deprecations, degraded
+# backends) still need to reach the operator's log. The goal is to drop
+# payload-bearing INFO/DEBUG chatter, not to go silent.
+DEFAULT_DEPENDENCY_LOG_LEVEL: int = logging.WARNING
 
 
 class McpDependencyError(RuntimeError):
@@ -89,27 +108,57 @@ def build_server(service: McpToolService):
     return server
 
 
-def _protect_stdio() -> None:
-    """Keep third-party logging off stdout.
+def quiet_dependency_logging(
+    level: int = DEFAULT_DEPENDENCY_LOG_LEVEL,
+    loggers: Sequence[str] = DEPENDENCY_LOGGERS,
+) -> dict[str, int]:
+    """Raise dependency logger levels, and report exactly what changed.
 
-    MCP over stdio uses stdout for the JSON-RPC stream itself, so anything
-    else printed there corrupts the protocol. LiteLLM currently logs to
-    stderr (verified), which is safe -- but that is a property of its
-    default config, not a guarantee, and a stray stdout write would surface
-    as an inscrutable protocol error rather than an obvious logging bug.
-    Belt and braces, since the cost is two lines.
+    This is NOT what protects the JSON-RPC wire. The SDK already does that,
+    and does it properly: while serving, `stdio_server()` dups the real
+    descriptors aside and points fd 0 at the null device and fd 1 at stderr,
+    restoring both on exit. Verified empirically in
+    tests/test_mcp_transport_integrity.py -- a tool doing `print()`,
+    `sys.stdout.write()` and even raw `os.write(1, ...)` cannot corrupt the
+    response. Nothing at Python level could improve on that.
+
+    What this function is actually for is the consequence of that design.
+    Because fd 1 is redirected to stderr, every stray byte a dependency
+    emits lands on stderr -- and MCP clients routinely capture stderr to a
+    log file. LiteLLM logs completion payloads at INFO, which for Sylvae
+    means the skill's INPUT and OUTPUT: arbitrary caller-supplied text that
+    may contain a diff with credentials in it, personal data, or anything
+    else the caller passed. Quiet-by-default keeps that off disk.
+
+    Returns the previous level of each logger it touched, so the change is
+    auditable and reversible rather than an invisible global mutation.
     """
-    import logging
+    previous: dict[str, int] = {}
+    for name in loggers:
+        logger = logging.getLogger(name)
+        previous[name] = logger.level
+        logger.setLevel(level)
+    return previous
 
+
+def _quiet_litellm_banner() -> bool:
+    """Silence LiteLLM's non-logging banner output. Returns whether it applied.
+
+    Separate from logger levels because it is a module attribute, not a
+    logger, and it is version-specific -- hence narrow exception handling
+    rather than a bare `except Exception`, so a genuine failure here is
+    still visible rather than swallowed.
+    """
     try:
         import litellm
+    except ModuleNotFoundError:
+        return False  # litellm not installed; the Ollama path is unavailable anyway
 
+    try:
         litellm.suppress_debug_info = True
-    except Exception:  # litellm absent or its API changed; nothing to protect
-        pass
-
-    for name in ("LiteLLM", "litellm", "httpx"):
-        logging.getLogger(name).setLevel(logging.WARNING)
+    except AttributeError:  # attribute renamed/removed in this version
+        return False
+    return True
 
 
 def serve(
@@ -117,8 +166,10 @@ def serve(
     runs_dir: str | Path = "runs",
     allow_recursive_backends: bool = False,
     timeout: float = DEFAULT_MCP_TIMEOUT,
+    dependency_log_level: int = DEFAULT_DEPENDENCY_LOG_LEVEL,
 ) -> None:
-    _protect_stdio()
+    quiet_dependency_logging(level=dependency_log_level)
+    _quiet_litellm_banner()
     service = McpToolService(
         skills_dir=skills_dir,
         runs_dir=runs_dir,

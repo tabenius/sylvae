@@ -35,6 +35,19 @@ def main(argv: list[str] | None = None) -> int:
             "interactive quota. This is your decision, not the calling model's."
         ),
     )
+    mcp_parser.add_argument(
+        "--dependency-log-level",
+        default="warning",
+        choices=["critical", "error", "warning", "info", "debug"],
+        help=(
+            "Level for noisy dependency loggers (litellm, httpx, ...). Default "
+            "'warning'. CAUTION: while serving over stdio the MCP SDK points fd 1 at "
+            "stderr, and clients commonly capture stderr to a log file. At 'info' or "
+            "'debug' these libraries log full request/response bodies — which for "
+            "Sylvae is the skill's input and output — so raising this writes "
+            "caller-supplied content to disk. Use for debugging, not routinely."
+        ),
+    )
 
     review_parser = subparsers.add_parser("review", help="Browse the evidence log in a local web page")
     review_parser.add_argument("--runs-dir", default="runs")
@@ -55,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "mcp":
+        import logging
+
         from sylvae.mcp.server import McpDependencyError, serve as serve_mcp
 
         try:
@@ -62,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
                 skills_dir=args.skills_dir,
                 runs_dir=args.runs_dir,
                 allow_recursive_backends=args.allow_recursive_backends,
+                dependency_log_level=getattr(logging, args.dependency_log_level.upper()),
             )
         except McpDependencyError as exc:
             print(str(exc), file=sys.stderr)
