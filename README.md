@@ -95,6 +95,30 @@ Triggered runs use real backends — a run through `shellout`/`opencode` can
 take a while and costs the same as running it from the CLI; there's no
 "cheap preview" mode.
 
+## Use from an agent (MCP)
+
+Sylvae can expose itself as an MCP server, so an agent can delegate work to
+a cheaper model mid-task instead of doing it inline:
+
+    pip install -e ".[mcp]"
+    claude mcp add sylvae -- /path/to/.venv/bin/sylvae mcp \
+        --skills-dir /path/to/skills --runs-dir /path/to/runs
+
+Two tools: `sylvae_list_skills` and `sylvae_run_skill`. Runs still land in
+the evidence log exactly as CLI runs do.
+
+**Two guards, on by default.** Runs default to the cheap local backend — an
+agent calling Sylvae and landing on something as expensive as itself has
+achieved nothing while still looking like it worked. And the `claudecode`
+backend is *refused* over MCP: it spawns an agent harness that can call
+Sylvae again, and it spends the same interactive quota the caller is
+already using. `--allow-recursive-backends` lifts that, but it's a flag
+*you* set when starting the server — deliberately not something a calling
+model can grant itself.
+
+`--backend auto` is refused here too, since tier routing could select a
+recursion-risk backend and reopen the hole.
+
 ## Test
 
     pytest

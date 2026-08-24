@@ -11,6 +11,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# Optional: only needed for `sylvae mcp`. Core Sylvae and its whole test
+# suite work without it, so CI stays green on a clean checkout.
+mcp = ["mcp>=1.0"]
 
 [project.scripts]
 sylvae = "sylvae.cli:main"

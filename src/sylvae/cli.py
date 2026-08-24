@@ -21,6 +21,21 @@ def main(argv: list[str] | None = None) -> int:
         help="Override the backend's default model (e.g. 'ollama/mistral:latest'). Omit to use the backend's default.",
     )
 
+    mcp_parser = subparsers.add_parser(
+        "mcp", help="Run an MCP server exposing skills to agents (needs the 'mcp' extra)"
+    )
+    mcp_parser.add_argument("--runs-dir", default="runs")
+    mcp_parser.add_argument("--skills-dir", default="skills")
+    mcp_parser.add_argument(
+        "--allow-recursive-backends",
+        action="store_true",
+        help=(
+            "Permit backends that spawn an agent harness (e.g. claudecode). Off by "
+            "default: such a backend can call Sylvae again and spends your own "
+            "interactive quota. This is your decision, not the calling model's."
+        ),
+    )
+
     review_parser = subparsers.add_parser("review", help="Browse the evidence log in a local web page")
     review_parser.add_argument("--runs-dir", default="runs")
     review_parser.add_argument("--skills-dir", default="skills")
@@ -36,6 +51,20 @@ def main(argv: list[str] | None = None) -> int:
         if record.status != "ok":
             detail = record.error or "skill run did not complete successfully"
             print(f"[{record.status}] {detail}", file=sys.stderr)
+            return 1
+        return 0
+
+    if args.command == "mcp":
+        from sylvae.mcp.server import McpDependencyError, serve as serve_mcp
+
+        try:
+            serve_mcp(
+                skills_dir=args.skills_dir,
+                runs_dir=args.runs_dir,
+                allow_recursive_backends=args.allow_recursive_backends,
+            )
+        except McpDependencyError as exc:
+            print(str(exc), file=sys.stderr)
             return 1
         return 0
 
