@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from sylvae.backends.base import BackendResult
-from sylvae.backends.subprocess_utils import run_subprocess_backend
+from sylvae.backends.base import BackendResult, InvalidModelName
+from sylvae.backends.subprocess_utils import guard_model, run_subprocess_backend
 from sylvae.loader import Skill
 
 
@@ -46,7 +46,13 @@ class OpenCodeBackend:
         self.timeout = timeout
 
     def run(self, prompt: str, skill: Skill, **kwargs: str) -> BackendResult:
-        model = kwargs.get("model", self.model)
+        try:
+            model = guard_model(kwargs.get("model", self.model))
+        except InvalidModelName as exc:
+            return BackendResult(
+                output="", model=str(kwargs.get("model")), duration_ms=0,
+                status="failed", error=str(exc),
+            )
         cmd = [self.command, "run", "--model", model, "--format", "json", prompt]
 
         return run_subprocess_backend(

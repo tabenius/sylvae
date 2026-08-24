@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from sylvae.loader import SkillLoadError, load_skill
+from sylvae.loader import SkillLoadError, load_skill, resolve_skill_dir
 from sylvae.review import list_skills as discover_skills
 from sylvae.runner import BACKENDS, run_skill
 
@@ -100,8 +100,12 @@ class McpToolService:
                 f"unknown backend {chosen!r} (known: {', '.join(sorted(BACKENDS))})"
             )
 
-        skill_path = self.skills_dir / skill
+        # Path traversal through this parameter was demonstrated before this
+        # check existed: a slug of "../../../../../tmp/evil-skill" loaded and
+        # ran a SKILL.md planted outside skills_dir. This surface is called by
+        # a model, so untrusted text it is processing can reach here.
         try:
+            skill_path = resolve_skill_dir(self.skills_dir, skill)
             load_skill(skill_path)
         except SkillLoadError as exc:
             return self._error(f"skill {skill!r} could not be loaded: {exc}")

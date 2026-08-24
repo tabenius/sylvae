@@ -4,7 +4,18 @@ import subprocess
 import time
 from typing import Callable
 
-from sylvae.backends.base import BackendResult, elapsed_ms
+from sylvae.backends.base import BackendResult, InvalidModelName, elapsed_ms, validate_model_name
+
+
+def guard_model(model: str | None) -> str | None:
+    """Validate an optional model id, or raise InvalidModelName.
+
+    Applied by every CLI-spawning backend before argv is assembled, so a
+    flag-shaped value never reaches a downstream argument parser.
+    """
+    if model is None:
+        return None
+    return validate_model_name(model)
 
 
 def run_subprocess_backend(

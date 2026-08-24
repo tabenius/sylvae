@@ -3,8 +3,8 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from sylvae.backends.base import BackendResult
-from sylvae.backends.subprocess_utils import run_subprocess_backend
+from sylvae.backends.base import BackendResult, InvalidModelName
+from sylvae.backends.subprocess_utils import guard_model, run_subprocess_backend
 from sylvae.loader import Skill
 
 
@@ -24,7 +24,13 @@ class ShelloutBackend:
         self.timeout = timeout
 
     def run(self, prompt: str, skill: Skill, **kwargs: str) -> BackendResult:
-        model = kwargs.get("model")
+        try:
+            model = guard_model(kwargs.get("model"))
+        except InvalidModelName as exc:
+            return BackendResult(
+                output="", model=str(kwargs.get("model")), duration_ms=0,
+                status="failed", error=str(exc),
+            )
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_path = Path(tmp_dir) / "output.txt"

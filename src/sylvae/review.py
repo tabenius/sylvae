@@ -7,7 +7,7 @@ from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from sylvae.loader import Skill, SkillLoadError, load_skill
+from sylvae.loader import Skill, SkillLoadError, load_skill, resolve_skill_dir
 from sylvae.runner import BACKENDS, run_skill
 
 _STATUS_COLORS = {"ok": "#2e7d46", "failed": "#b3261e", "unavailable": "#9a6300"}
@@ -270,7 +270,15 @@ class _ReviewHandler(BaseHTTPRequestHandler):
             self._write_html(render_error(f"unknown skill: {skill_slug!r}"), status=400)
             return
 
-        skill_path = Path(self.skills_dir) / skill_slug
+        # The allowlist alone does not cover every case: a discovered skill
+        # directory that is itself a symlink out of skills/ has a perfectly
+        # ordinary name and would pass the check above. resolve_skill_dir
+        # re-checks containment after resolution, which catches that.
+        try:
+            skill_path = resolve_skill_dir(self.skills_dir, skill_slug)
+        except SkillLoadError as exc:
+            self._write_html(render_error(str(exc)), status=400)
+            return
 
         try:
             record = run_skill(
