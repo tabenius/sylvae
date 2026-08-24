@@ -245,3 +245,85 @@ def test_post_run_with_unknown_skill_returns_client_error_not_a_crash(tmp_path):
 
     assert raised is not None
     assert raised.code == 400
+
+
+@patch("sylvae.review.run_skill")
+def test_post_run_rejects_path_traversal_slug_without_calling_run_skill(mock_run_skill, tmp_path):
+    (tmp_path / "runs").mkdir()
+    _make_skill_fixture(tmp_path / "skills", "summarize-diff")
+
+    server, port = _running_server(tmp_path)
+    try:
+        data = urllib.parse.urlencode({
+            "skill": "../../../../etc", "backend": "ollama", "model": "", "input_text": "hi",
+        }).encode()
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/run", data=data, method="POST")
+        try:
+            urllib.request.urlopen(req, timeout=5)
+            raised = None
+        except urllib.error.HTTPError as exc:
+            raised = exc
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert raised is not None
+    assert raised.code == 400
+    mock_run_skill.assert_not_called()
+
+
+@patch("sylvae.review.run_skill")
+def test_post_run_rejects_cross_origin_request(mock_run_skill, tmp_path):
+    (tmp_path / "runs").mkdir()
+    _make_skill_fixture(tmp_path / "skills", "summarize-diff")
+
+    server, port = _running_server(tmp_path)
+    try:
+        data = urllib.parse.urlencode({
+            "skill": "summarize-diff", "backend": "ollama", "model": "", "input_text": "hi",
+        }).encode()
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/run", data=data, method="POST",
+            headers={"Origin": "http://evil.example"},
+        )
+        try:
+            urllib.request.urlopen(req, timeout=5)
+            raised = None
+        except urllib.error.HTTPError as exc:
+            raised = exc
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert raised is not None
+    assert raised.code == 403
+    mock_run_skill.assert_not_called()
+
+
+@patch("sylvae.review.run_skill")
+def test_post_run_allows_matching_same_origin_request(mock_run_skill, tmp_path):
+    (tmp_path / "runs").mkdir()
+    _make_skill_fixture(tmp_path / "skills", "summarize-diff")
+    mock_run_skill.return_value = EvidenceRecord(
+        skill="summarize-diff", backend="ollama", model="ollama/mistral:latest",
+        input_summary="hi", output="ok", duration_ms=1,
+        status="ok", timestamp="2026-08-24T10:00:00Z", error=None,
+    )
+
+    server, port = _running_server(tmp_path)
+    try:
+        data = urllib.parse.urlencode({
+            "skill": "summarize-diff", "backend": "ollama", "model": "", "input_text": "hi",
+        }).encode()
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/run", data=data, method="POST",
+            headers={"Origin": f"http://127.0.0.1:{port}"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            status = resp.status
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert status == 200
+    mock_run_skill.assert_called_once()

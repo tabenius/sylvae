@@ -243,6 +243,16 @@ class _ReviewHandler(BaseHTTPRequestHandler):
             self._write_html(render_error(f"no such route: {self.path}"), status=404)
             return
 
+        # A plain HTML form has no built-in cross-origin protection, and
+        # this server triggers real, costly backend calls — a page open
+        # in the operator's browser could otherwise POST here silently.
+        # Browsers send Origin on cross-site POSTs; a request with no
+        # Origin (curl, scripts) is allowed through unchanged.
+        origin = self.headers.get("Origin")
+        if origin is not None and origin != f"http://{self.headers.get('Host', '')}":
+            self._write_html(render_error("cross-origin request rejected"), status=403)
+            return
+
         length = int(self.headers.get("Content-Length", 0))
         raw_body = self.rfile.read(length).decode("utf-8")
         fields = urllib.parse.parse_qs(raw_body)
@@ -250,6 +260,15 @@ class _ReviewHandler(BaseHTTPRequestHandler):
         backend = (fields.get("backend") or [""])[0]
         model = (fields.get("model") or [""])[0].strip() or None
         input_text = (fields.get("input_text") or [""])[0]
+
+        # Only a slug that list_skills() itself discovered is allowed —
+        # closes path traversal (a slug containing "../" can never match
+        # a real discovered directory name) without needing a separate
+        # character blocklist.
+        allowed_slugs = {s.slug for s in list_skills(self.skills_dir)}
+        if skill_slug not in allowed_slugs:
+            self._write_html(render_error(f"unknown skill: {skill_slug!r}"), status=400)
+            return
 
         skill_path = Path(self.skills_dir) / skill_slug
 
