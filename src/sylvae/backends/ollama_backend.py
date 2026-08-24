@@ -41,6 +41,8 @@ class OllamaBackend:
 
     def run(self, prompt: str, skill: Skill, **kwargs: str) -> BackendResult:
         model = kwargs.get("model", self.model)
+        if not model.startswith("ollama/"):
+            model = f"ollama/{model}"
         start = time.monotonic()
 
         reachable, has_model = _check_model_availability(self.api_base, model)

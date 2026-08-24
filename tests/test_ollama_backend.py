@@ -116,3 +116,30 @@ def test_check_model_availability_reports_model_presence():
 
     assert reachable is True
     assert has_model is True
+
+
+@_preflight_ok()
+@patch("sylvae.backends.ollama_backend.litellm.completion")
+def test_run_auto_prefixes_bare_model_kwarg(mock_completion, mock_preflight):
+    mock_completion.return_value = {"choices": [{"message": {"content": "ok"}}]}
+
+    backend = OllamaBackend()
+    result = backend.run("prompt", make_skill(), model="qwen2.5:14b")
+
+    assert mock_completion.call_args.kwargs["model"] == "ollama/qwen2.5:14b"
+    assert result.model == "ollama/qwen2.5:14b"
+    # the availability check must see the same normalized model too
+    mock_preflight.assert_called_once()
+    assert mock_preflight.call_args.args[1] == "ollama/qwen2.5:14b"
+
+
+@_preflight_ok()
+@patch("sylvae.backends.ollama_backend.litellm.completion")
+def test_run_does_not_double_prefix_an_already_prefixed_model(mock_completion, mock_preflight):
+    mock_completion.return_value = {"choices": [{"message": {"content": "ok"}}]}
+
+    backend = OllamaBackend()
+    result = backend.run("prompt", make_skill(), model="ollama/mistral:latest")
+
+    assert result.model == "ollama/mistral:latest"
+    assert mock_completion.call_args.kwargs["model"] == "ollama/mistral:latest"

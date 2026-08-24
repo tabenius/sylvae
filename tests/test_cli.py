@@ -58,7 +58,7 @@ def test_main_rejects_unknown_backend_before_running():
     assert exc_info.value.code == 2
 
 
-@patch("sylvae.backends.shellout_backend.subprocess.run", side_effect=FileNotFoundError())
+@patch("sylvae.backends.subprocess_utils.subprocess.run", side_effect=FileNotFoundError())
 def test_main_end_to_end_via_shellout(mock_subprocess_run, tmp_path, monkeypatch):
     # Now that ShelloutBackend is real (not a phase-1 stub), the subprocess
     # boundary must stay mocked here — otherwise this "no live deps" proof
