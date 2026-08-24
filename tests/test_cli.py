@@ -8,11 +8,11 @@ from sylvae.evidence import EvidenceRecord
 from sylvae.cli import main
 
 
-def make_record(status: str = "ok") -> EvidenceRecord:
+def make_record(status: str = "ok", error: str | None = None) -> EvidenceRecord:
     return EvidenceRecord(
         skill="summarize-diff", backend="anthropic", model="claude-sonnet-5",
         input_summary="x", output="the output", duration_ms=1,
-        status=status, timestamp="2026-08-23T10:00:00+00:00",
+        status=status, timestamp="2026-08-23T10:00:00+00:00", error=error,
     )
 
 
@@ -36,6 +36,20 @@ def test_main_returns_one_on_non_ok_status(mock_run_skill, capsys):
     captured = capsys.readouterr()
     assert exit_code == 1
     assert "unavailable" in captured.err
+
+
+@patch("sylvae.cli.run_skill")
+def test_main_prints_real_error_when_present(mock_run_skill, capsys):
+    mock_run_skill.return_value = make_record(
+        status="unavailable",
+        error="model 'qwen2.5:14b' not found on Ollama server — run `ollama pull qwen2.5:14b`",
+    )
+
+    exit_code = main(["run", "skills/summarize-diff", "--backend", "ollama", "--input", "hi"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "ollama pull qwen2.5:14b" in captured.err
 
 
 def test_main_rejects_unknown_backend_before_running():

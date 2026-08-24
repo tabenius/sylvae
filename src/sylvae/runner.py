@@ -55,6 +55,7 @@ def run_skill(
         duration_ms=result.duration_ms,
         status=result.status,
         timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        error=result.error,
     )
     append_evidence(record, runs_dir=runs_dir)
     return record

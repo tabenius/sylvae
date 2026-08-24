@@ -15,6 +15,7 @@ class EvidenceRecord:
     duration_ms: int
     status: str  # "ok" | "failed" | "unavailable"
     timestamp: str  # ISO 8601
+    error: str | None = None
 
 
 def append_evidence(record: EvidenceRecord, runs_dir: str | Path = "runs") -> Path:

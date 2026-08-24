@@ -37,3 +37,18 @@ def test_append_evidence_appends_to_same_day_file(tmp_path):
 
     lines = (runs_dir / "2026-08-23.jsonl").read_text().strip().splitlines()
     assert len(lines) == 2
+
+
+def test_evidence_record_error_defaults_to_none_and_round_trips_when_set(tmp_path):
+    runs_dir = tmp_path / "runs"
+    record = EvidenceRecord(
+        skill="summarize-diff", backend="ollama", model="ollama/qwen2.5:14b",
+        input_summary="x", output="", duration_ms=14, status="unavailable",
+        timestamp="2026-08-23T10:00:00+00:00", error="model 'qwen2.5:14b' not found",
+    )
+    assert make_record().error is None
+
+    append_evidence(record, runs_dir=runs_dir)
+
+    loaded = json.loads((runs_dir / "2026-08-23.jsonl").read_text().strip())
+    assert loaded["error"] == "model 'qwen2.5:14b' not found"

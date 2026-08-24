@@ -74,3 +74,17 @@ def test_run_skill_omits_model_kwarg_when_not_given(tmp_path, monkeypatch):
     run_skill(SKILL_PATH, "fake", "some input text", runs_dir=tmp_path)
 
     assert "model" not in fake_backend.run.call_args.kwargs
+
+
+def test_run_skill_threads_backend_error_into_evidence_record(tmp_path, monkeypatch):
+    fake_backend = MagicMock()
+    fake_backend.run.return_value = BackendResult(
+        output="", model="fake-model", duration_ms=5, status="unavailable",
+        error="model 'x' not found on Ollama server — run `ollama pull x`",
+    )
+    monkeypatch.setitem(BACKENDS, "fake", MagicMock(return_value=fake_backend))
+
+    record = run_skill(SKILL_PATH, "fake", "some input text", runs_dir=tmp_path)
+
+    assert record.status == "unavailable"
+    assert record.error == "model 'x' not found on Ollama server — run `ollama pull x`"

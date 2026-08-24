@@ -13,7 +13,7 @@ class AnthropicBackend:
         self.model = model
         self._client = Anthropic(api_key=api_key)
 
-    def run(self, prompt: str, skill: Skill, **kwargs: object) -> BackendResult:
+    def run(self, prompt: str, skill: Skill, **kwargs: str) -> BackendResult:
         import time
 
         model = kwargs.get("model", self.model)

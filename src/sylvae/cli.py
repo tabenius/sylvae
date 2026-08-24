@@ -27,7 +27,8 @@ def main(argv: list[str] | None = None) -> int:
         if record.output:
             print(record.output)
         if record.status != "ok":
-            print(f"[{record.status}] skill run did not complete successfully", file=sys.stderr)
+            detail = record.error or "skill run did not complete successfully"
+            print(f"[{record.status}] {detail}", file=sys.stderr)
             return 1
         return 0
 
