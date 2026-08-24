@@ -1,9 +1,12 @@
 # Sylvae
 
 A portable skill runner: load a `SKILL.md`-format skill and run it against
-Anthropic's API, a local Ollama model, Codex, or OpenCode (the latter two
-via their own CLIs, run sandboxed/subprocessed) — with every run logged as
-a durable evidence record.
+a local Ollama model, Claude Code, Codex, OpenCode, or the Anthropic API —
+with every run logged as a durable evidence record.
+
+Four of the five backends need no API key of their own: they reuse CLI
+tools you're already logged into. Sylvae spans four agent families without
+any single vendor's credentials being required for it to work.
 
 Phase 1 goal, architecture, and rationale: see
 `docs/superpowers/specs/2026-08-21-sylvae-phase1-skill-runner-design.md`.
@@ -45,6 +48,36 @@ resource:
 `opencode`'s own model catalog (`opencode models`) is large — gpt-5.x,
 kimi, glm, deepseek, big-pickle, and many more — all reachable through
 `--model opencode/<name>`.
+
+### The `claudecode` backend
+
+Runs the local `claude` CLI headlessly, authenticating with your existing
+Claude subscription rather than an `ANTHROPIC_API_KEY` — useful when you
+have the former and not the latter:
+
+    sylvae run skills/disk-report --backend claudecode --input path/to/disk-usage.txt
+
+It invokes `claude -p --output-format json --setting-sources "" --strict-mcp-config`.
+Those last two flags are there for cost, not tidiness. Measured on the
+same trivial prompt:
+
+| invocation | tokens | cost |
+| --- | --- | --- |
+| default | 28,424 | $0.171 |
+| with both flags | 3,146 | $0.027 |
+
+The default loads every installed plugin, skill, and agent before
+answering — bootstrap Sylvae has no use for, since a skill run is plain
+text in, text out. Dropping the setting sources sheds all of it; auth
+lives outside settings and survives. (`--bare` sheds more but also drops
+auth; replacing the system prompt with `--system-prompt` made it *worse*,
+back up to 16,574 tokens.)
+
+**One caveat worth knowing before routing to it.** Codex and OpenCode
+draw on separate accounts. This one shares your interactive Claude
+budget — every run spends the same five-hour allowance you use to work.
+Hitting that limit is reported as `unavailable`, not `failed`: the run
+never happened, it didn't happen badly.
 
 ## Review
 

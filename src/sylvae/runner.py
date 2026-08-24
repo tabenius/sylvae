@@ -5,6 +5,7 @@ from pathlib import Path
 
 from sylvae.backends.anthropic_backend import AnthropicBackend
 from sylvae.backends.base import Backend
+from sylvae.backends.claudecode_backend import ClaudeCodeBackend
 from sylvae.backends.ollama_backend import OllamaBackend
 from sylvae.backends.opencode_backend import OpenCodeBackend
 from sylvae.backends.shellout_backend import ShelloutBackend
@@ -13,6 +14,7 @@ from sylvae.loader import Skill, load_skill
 
 BACKENDS: dict[str, type[Backend]] = {
     "anthropic": AnthropicBackend,
+    "claudecode": ClaudeCodeBackend,
     "ollama": OllamaBackend,
     "shellout": ShelloutBackend,
     "opencode": OpenCodeBackend,
