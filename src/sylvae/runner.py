@@ -33,6 +33,7 @@ def run_skill(
     backend_name: str,
     raw_input: str,
     runs_dir: str | Path = "runs",
+    model: str | None = None,
 ) -> EvidenceRecord:
     if backend_name not in BACKENDS:
         raise ValueError(f"unknown backend: {backend_name!r} (known: {sorted(BACKENDS)})")
@@ -42,7 +43,8 @@ def run_skill(
     prompt = build_prompt(skill, resolved_input)
 
     backend = BACKENDS[backend_name]()
-    result = backend.run(prompt, skill)
+    run_kwargs = {"model": model} if model else {}
+    result = backend.run(prompt, skill, **run_kwargs)
 
     record = EvidenceRecord(
         skill=skill.slug,

@@ -14,11 +14,16 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("skill_path")
     run_parser.add_argument("--backend", required=True, choices=sorted(BACKENDS))
     run_parser.add_argument("--input", required=True)
+    run_parser.add_argument(
+        "--model",
+        default=None,
+        help="Override the backend's default model (e.g. 'ollama/mistral:latest'). Omit to use the backend's default.",
+    )
 
     args = parser.parse_args(argv)
 
     if args.command == "run":
-        record = run_skill(args.skill_path, args.backend, args.input)
+        record = run_skill(args.skill_path, args.backend, args.input, model=args.model)
         if record.output:
             print(record.output)
         if record.status != "ok":

@@ -17,7 +17,7 @@ class ShelloutBackend:
     def __init__(self, command: str = "codex"):
         self.command = command
 
-    def run(self, prompt: str, skill: Skill) -> BackendResult:
+    def run(self, prompt: str, skill: Skill, **kwargs: object) -> BackendResult:
         return BackendResult(
             output="",
             model=self.command,

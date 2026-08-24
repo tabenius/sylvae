@@ -52,3 +52,19 @@ def test_run_returns_failed_on_other_errors(mock_anthropic_cls):
     result = backend.run("prompt", make_skill())
 
     assert result.status == "failed"
+
+
+@patch("sylvae.backends.anthropic_backend.Anthropic")
+def test_run_model_kwarg_overrides_default(mock_anthropic_cls):
+    mock_block = MagicMock(type="text", text="hello there")
+    mock_response = MagicMock(content=[mock_block])
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+    mock_anthropic_cls.return_value = mock_client
+
+    backend = AnthropicBackend(api_key="fake")
+    result = backend.run("prompt", make_skill(), model="claude-opus-5")
+
+    assert result.model == "claude-opus-5"
+    assert mock_client.messages.create.call_args.kwargs["model"] == "claude-opus-5"
+    assert backend.model == "claude-sonnet-5"

@@ -45,3 +45,17 @@ def test_run_returns_failed_on_other_errors(mock_completion):
     result = backend.run("prompt", make_skill())
 
     assert result.status == "failed"
+
+
+@patch("sylvae.backends.ollama_backend.litellm.completion")
+def test_run_model_kwarg_overrides_default(mock_completion):
+    mock_completion.return_value = {
+        "choices": [{"message": {"content": "mistral answer"}}]
+    }
+
+    backend = OllamaBackend()
+    result = backend.run("prompt", make_skill(), model="ollama/mistral:latest")
+
+    assert result.model == "ollama/mistral:latest"
+    assert mock_completion.call_args.kwargs["model"] == "ollama/mistral:latest"
+    assert backend.model == "ollama/qwen2.5:14b"

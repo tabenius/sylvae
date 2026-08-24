@@ -19,7 +19,7 @@ class BackendResult:
 class Backend(Protocol):
     name: str
 
-    def run(self, prompt: str, skill: Skill) -> BackendResult: ...
+    def run(self, prompt: str, skill: Skill, **kwargs: object) -> BackendResult: ...
 
 
 def elapsed_ms(start: float) -> int:

@@ -16,24 +16,25 @@ class OllamaBackend:
         self.model = model
         self.api_base = api_base
 
-    def run(self, prompt: str, skill: Skill) -> BackendResult:
+    def run(self, prompt: str, skill: Skill, **kwargs: object) -> BackendResult:
+        model = kwargs.get("model", self.model)
         start = time.monotonic()
         try:
             response = litellm.completion(
-                model=self.model,
+                model=model,
                 api_base=self.api_base,
                 messages=[{"role": "user", "content": prompt}],
             )
         except APIConnectionError as exc:
             return BackendResult(
-                output="", model=self.model, duration_ms=elapsed_ms(start),
+                output="", model=model, duration_ms=elapsed_ms(start),
                 status="unavailable", error=str(exc),
             )
         except Exception as exc:
             return BackendResult(
-                output="", model=self.model, duration_ms=elapsed_ms(start),
+                output="", model=model, duration_ms=elapsed_ms(start),
                 status="failed", error=str(exc),
             )
 
         output = response["choices"][0]["message"].get("content") or ""
-        return BackendResult(output=output, model=self.model, duration_ms=elapsed_ms(start), status="ok")
+        return BackendResult(output=output, model=model, duration_ms=elapsed_ms(start), status="ok")

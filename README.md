@@ -17,6 +17,11 @@ Phase 1 goal, architecture, and rationale: see
 
     sylvae run skills/summarize-diff --backend anthropic --input path/to/diff.txt
 
+Override the backend's default model with `--model`. Use the full identifier
+the backend expects — for Ollama that means litellm's `ollama/<name>` form:
+
+    sylvae run skills/summarize-diff --backend ollama --model ollama/mistral:latest --input path/to/diff.txt
+
 ## Test
 
     pytest

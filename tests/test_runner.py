@@ -48,3 +48,29 @@ def test_run_skill_writes_evidence_and_returns_record(tmp_path, monkeypatch):
 def test_run_skill_rejects_unknown_backend(tmp_path):
     with pytest.raises(ValueError):
         run_skill(SKILL_PATH, "not-a-real-backend", "input", runs_dir=tmp_path)
+
+
+def test_run_skill_forwards_model_override_to_backend(tmp_path, monkeypatch):
+    fake_backend = MagicMock()
+    fake_backend.run.return_value = BackendResult(
+        output="a summary", model="custom-model", duration_ms=10, status="ok"
+    )
+    monkeypatch.setitem(BACKENDS, "fake", MagicMock(return_value=fake_backend))
+
+    record = run_skill(SKILL_PATH, "fake", "some input text", runs_dir=tmp_path, model="custom-model")
+
+    assert record.model == "custom-model"
+    fake_backend.run.assert_called_once()
+    assert fake_backend.run.call_args.kwargs["model"] == "custom-model"
+
+
+def test_run_skill_omits_model_kwarg_when_not_given(tmp_path, monkeypatch):
+    fake_backend = MagicMock()
+    fake_backend.run.return_value = BackendResult(
+        output="a summary", model="default-model", duration_ms=10, status="ok"
+    )
+    monkeypatch.setitem(BACKENDS, "fake", MagicMock(return_value=fake_backend))
+
+    run_skill(SKILL_PATH, "fake", "some input text", runs_dir=tmp_path)
+
+    assert "model" not in fake_backend.run.call_args.kwargs

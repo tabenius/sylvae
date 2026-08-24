@@ -57,3 +57,21 @@ def test_main_end_to_end_via_shellout(tmp_path, monkeypatch):
     record = json.loads(runs_files[0].read_text().strip())
     assert record["status"] == "unavailable"
     assert record["skill"] == "summarize-diff"
+
+
+@patch("sylvae.cli.run_skill")
+def test_main_forwards_model_flag(mock_run_skill):
+    mock_run_skill.return_value = make_record(status="ok")
+
+    main(["run", "skills/summarize-diff", "--backend", "ollama", "--input", "hi", "--model", "ollama/mistral:latest"])
+
+    assert mock_run_skill.call_args.kwargs["model"] == "ollama/mistral:latest"
+
+
+@patch("sylvae.cli.run_skill")
+def test_main_omits_model_kwarg_when_flag_not_given(mock_run_skill):
+    mock_run_skill.return_value = make_record(status="ok")
+
+    main(["run", "skills/summarize-diff", "--backend", "anthropic", "--input", "hi"])
+
+    assert mock_run_skill.call_args.kwargs.get("model") is None
