@@ -58,7 +58,14 @@ def test_main_rejects_unknown_backend_before_running():
     assert exc_info.value.code == 2
 
 
-def test_main_end_to_end_via_shellout(tmp_path, monkeypatch):
+@patch("sylvae.backends.shellout_backend.subprocess.run", side_effect=FileNotFoundError())
+def test_main_end_to_end_via_shellout(mock_subprocess_run, tmp_path, monkeypatch):
+    # Now that ShelloutBackend is real (not a phase-1 stub), the subprocess
+    # boundary must stay mocked here — otherwise this "no live deps" proof
+    # would itself become a live external process call. Simulating codex
+    # missing from PATH still exercises the full real chain (cli -> loader
+    # -> runner -> backend -> evidence) without depending on codex being
+    # installed wherever this suite runs.
     monkeypatch.chdir(tmp_path)
     repo_root = Path(__file__).parent.parent
     skill_path = repo_root / "skills" / "summarize-diff"
