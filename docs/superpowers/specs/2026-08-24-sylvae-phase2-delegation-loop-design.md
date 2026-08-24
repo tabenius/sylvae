@@ -123,11 +123,48 @@ away.
 Every evidence-based rule needs an explicit minimum-sample gate, and
 below that gate the declared tier stands.
 
-**Anthropic has never actually run.** Adaptive routing will route work
-*to* the Anthropic backend, which to date is 100% mock-tested — every
-other backend now has real traffic behind it. This moves from hygiene to
-genuinely blocking: the loop cannot be trusted end to end while one of
-its two endpoints is unverified.
+**The frontier endpoint is not Anthropic.** *(Revised 2026-08-24, after
+the first draft of this document got it wrong.)*
+
+The original draft named the Anthropic backend as the frontier endpoint
+and made verifying it a hard blocker. That was a planning error: Anthropic
+API access is a separate paid product from a Claude subscription, and no
+key is obtainable here. Blocking the critical path on it would have
+blocked everything on something that cannot happen.
+
+Worse, the assumption had already shipped as a live defect. `--backend
+auto` routes `tier: frontier` — *and unset tier, the default for every
+undeclared skill* — to Anthropic, so the default path of the headline
+feature fails on auth. It went unnoticed because manual testing always
+passed an explicit `--backend`, and the single `auto` test used
+`disk-report`, which is `tier: cheap` and takes the one working branch.
+
+What is actually available here, all verified working:
+
+- **Ollama** locally (free, unlimited, currently only mistral pulled)
+- **Codex** via `codex exec`, on existing ChatGPT-account auth
+- **OpenCode** via `opencode run`, reaching the OpenCode Zen catalog —
+  including six free models (`hy3-free`, `mimo-v2.5-free`,
+  `muse-spark-1.2-contributor-free`, `nemotron-3-ultra-free`,
+  `nemotron-3.5-lightning-free`, `x-preview-f-free`)
+
+Free-tier reliability is genuinely variable: on the same trivial prompt,
+`mimo-v2.5-free` answered in ~8s while `nemotron-3-ultra-free` returned
+an upstream 502. That is not a nuisance to route around — it means
+`ok_rate` carries real signal here rather than being a formality that
+always reads 1.0, and it makes the `unavailable` vs `failed` distinction
+load-bearing in a way it would not be against a single reliable paid API.
+
+This reframing is better on the merits than what it replaced. The
+interesting delegation question was never local-mistral versus a frontier
+API. It is: given a local model, several free hosted models of uneven
+reliability, and two full agent harnesses, which work goes where? That is
+a closer fit to the original question about what weak models can handle,
+and it is answerable with resources that actually exist.
+
+The Anthropic backend stays in the codebase — mock-tested, unreachable in
+practice, and immediately usable by anyone who does have a key. That is an
+honest state, not a broken one.
 
 ## Three tiers, not two
 
@@ -165,5 +202,7 @@ Phase 2 is done when all of the following are demonstrably true:
 4. `--backend auto` demonstrably changes its decision for at least one
    real skill based on accumulated evidence rather than frontmatter, and
    can explain why it did.
-5. The Anthropic backend has completed a real, logged, live run.
+5. `--backend auto` works at all for a skill that is not `tier: cheap`
+   — it does not today (see the revised tension above), which makes this
+   the first thing to fix, not the last.
 6. The whole thing still passes CI on a clean checkout.
