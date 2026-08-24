@@ -1,8 +1,12 @@
 import json
 import threading
+import urllib.error
+import urllib.parse
 import urllib.request
+from unittest.mock import patch
 
-from sylvae.review import load_all_runs, render_html, start_server
+from sylvae.evidence import EvidenceRecord
+from sylvae.review import list_skills, load_all_runs, render_html, start_server
 
 
 def _write_jsonl(path, records):
@@ -99,3 +103,145 @@ def test_server_serves_rendered_page_on_loopback_only(tmp_path):
 
     assert status == 200
     assert "live-test-skill" in body
+
+
+def _make_skill_fixture(skills_dir, slug, tier=None):
+    skill_dir = skills_dir / slug
+    skill_dir.mkdir(parents=True)
+    tier_line = f"tier: {tier}\n" if tier else ""
+    (skill_dir / "SKILL.md").write_text(
+        f"---\nname: {slug}\ndescription: a test skill\n{tier_line}---\nDo the thing."
+    )
+
+
+def test_list_skills_reads_real_skill_fixtures(tmp_path):
+    _make_skill_fixture(tmp_path, "alpha", tier="cheap")
+    _make_skill_fixture(tmp_path, "beta")
+
+    skills = list_skills(tmp_path)
+
+    assert {s.slug for s in skills} == {"alpha", "beta"}
+    assert next(s for s in skills if s.slug == "alpha").tier == "cheap"
+
+
+def test_list_skills_returns_empty_list_for_missing_dir(tmp_path):
+    assert list_skills(tmp_path / "does-not-exist") == []
+
+
+def test_list_skills_skips_a_malformed_skill_without_crashing(tmp_path):
+    _make_skill_fixture(tmp_path, "good")
+    broken_dir = tmp_path / "broken"
+    broken_dir.mkdir()
+    (broken_dir / "SKILL.md").write_text("not even frontmatter")
+
+    skills = list_skills(tmp_path)
+
+    assert {s.slug for s in skills} == {"good"}
+
+
+def _running_server(tmp_path, **overrides):
+    kwargs = {"runs_dir": tmp_path / "runs", "skills_dir": tmp_path / "skills", "host": "127.0.0.1", "port": 0}
+    kwargs.update(overrides)
+    server = start_server(**kwargs)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, port
+
+
+def test_get_root_includes_a_run_form_with_skill_options(tmp_path):
+    (tmp_path / "runs").mkdir()
+    _make_skill_fixture(tmp_path / "skills", "summarize-diff")
+
+    server, port = _running_server(tmp_path)
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+            body = resp.read().decode("utf-8")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert '<form' in body
+    assert 'value="summarize-diff"' in body
+    assert 'action="/run"' in body
+
+
+@patch("sylvae.review.run_skill")
+def test_post_run_triggers_run_skill_and_shows_result(mock_run_skill, tmp_path):
+    (tmp_path / "runs").mkdir()
+    _make_skill_fixture(tmp_path / "skills", "summarize-diff")
+    mock_run_skill.return_value = EvidenceRecord(
+        skill="summarize-diff", backend="ollama", model="ollama/mistral:latest",
+        input_summary="hello", output="a real result", duration_ms=42,
+        status="ok", timestamp="2026-08-24T10:00:00Z", error=None,
+    )
+
+    server, port = _running_server(tmp_path)
+    try:
+        data = urllib.parse.urlencode({
+            "skill": "summarize-diff", "backend": "ollama", "model": "", "input_text": "hello",
+        }).encode()
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/run", data=data, method="POST")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            body = resp.read().decode("utf-8")
+            status = resp.status
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert status == 200
+    assert "a real result" in body
+    mock_run_skill.assert_called_once()
+    call_kwargs = mock_run_skill.call_args.kwargs
+    assert call_kwargs.get("model") is None
+    call_args = mock_run_skill.call_args.args
+    assert str(tmp_path / "skills" / "summarize-diff") in str(call_args[0])
+    assert call_args[1] == "ollama"
+    assert call_args[2] == "hello"
+
+
+@patch("sylvae.review.run_skill")
+def test_post_run_forwards_model_override(mock_run_skill, tmp_path):
+    (tmp_path / "runs").mkdir()
+    _make_skill_fixture(tmp_path / "skills", "summarize-diff")
+    mock_run_skill.return_value = EvidenceRecord(
+        skill="summarize-diff", backend="ollama", model="ollama/mistral:latest",
+        input_summary="hello", output="ok", duration_ms=1,
+        status="ok", timestamp="2026-08-24T10:00:00Z", error=None,
+    )
+
+    server, port = _running_server(tmp_path)
+    try:
+        data = urllib.parse.urlencode({
+            "skill": "summarize-diff", "backend": "ollama", "model": "ollama/mistral:latest", "input_text": "hi",
+        }).encode()
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/run", data=data, method="POST")
+        urllib.request.urlopen(req, timeout=5).close()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert mock_run_skill.call_args.kwargs["model"] == "ollama/mistral:latest"
+
+
+def test_post_run_with_unknown_skill_returns_client_error_not_a_crash(tmp_path):
+    (tmp_path / "runs").mkdir()
+    _make_skill_fixture(tmp_path / "skills", "summarize-diff")
+
+    server, port = _running_server(tmp_path)
+    try:
+        data = urllib.parse.urlencode({
+            "skill": "does-not-exist", "backend": "ollama", "model": "", "input_text": "hi",
+        }).encode()
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/run", data=data, method="POST")
+        try:
+            urllib.request.urlopen(req, timeout=5)
+            raised = None
+        except urllib.error.HTTPError as exc:
+            raised = exc
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert raised is not None
+    assert raised.code == 400

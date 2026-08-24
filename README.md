@@ -49,13 +49,18 @@ kimi, glm, deepseek, big-pickle, and many more — all reachable through
 ## Review
 
 Browse the evidence log in a local, loopback-only web page — filter by
-skill/backend/status, expand a run to see its input/output/error:
+skill/backend/status, expand a run to see its input/output/error — and
+trigger new runs straight from the page (pick a skill, backend, optional
+model, paste input, submit):
 
     sylvae review
 
-Opens at `http://127.0.0.1:8971/` by default. `--runs-dir`, `--host`, and
-`--port` override the defaults; `--host 0.0.0.0` allows LAN access if you
-actually want that (the default is loopback-only on purpose).
+Opens at `http://127.0.0.1:8971/` by default. `--runs-dir`, `--skills-dir`,
+`--host`, and `--port` override the defaults; `--host 0.0.0.0` allows LAN
+access if you actually want that (the default is loopback-only on purpose).
+Triggered runs use real backends — a run through `shellout`/`opencode` can
+take a while and costs the same as running it from the CLI; there's no
+"cheap preview" mode.
 
 ## Test
 

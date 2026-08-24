@@ -113,11 +113,16 @@ def test_main_review_forwards_defaults(mock_serve):
     exit_code = main(["review"])
 
     assert exit_code == 0
-    mock_serve.assert_called_once_with(runs_dir="runs", host="127.0.0.1", port=8971)
+    mock_serve.assert_called_once_with(runs_dir="runs", skills_dir="skills", host="127.0.0.1", port=8971)
 
 
 @patch("sylvae.cli.serve")
 def test_main_review_forwards_custom_flags(mock_serve):
-    main(["review", "--runs-dir", "/tmp/other-runs", "--host", "0.0.0.0", "--port", "9999"])
+    main([
+        "review", "--runs-dir", "/tmp/other-runs", "--skills-dir", "/tmp/other-skills",
+        "--host", "0.0.0.0", "--port", "9999",
+    ])
 
-    mock_serve.assert_called_once_with(runs_dir="/tmp/other-runs", host="0.0.0.0", port=9999)
+    mock_serve.assert_called_once_with(
+        runs_dir="/tmp/other-runs", skills_dir="/tmp/other-skills", host="0.0.0.0", port=9999,
+    )
