@@ -106,3 +106,18 @@ def test_main_accepts_auto_backend(mock_run_skill):
 
     assert exit_code == 0
     assert mock_run_skill.call_args.args[1] == "auto"
+
+
+@patch("sylvae.cli.serve")
+def test_main_review_forwards_defaults(mock_serve):
+    exit_code = main(["review"])
+
+    assert exit_code == 0
+    mock_serve.assert_called_once_with(runs_dir="runs", host="127.0.0.1", port=8971)
+
+
+@patch("sylvae.cli.serve")
+def test_main_review_forwards_custom_flags(mock_serve):
+    main(["review", "--runs-dir", "/tmp/other-runs", "--host", "0.0.0.0", "--port", "9999"])
+
+    mock_serve.assert_called_once_with(runs_dir="/tmp/other-runs", host="0.0.0.0", port=9999)

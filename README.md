@@ -46,6 +46,17 @@ resource:
 kimi, glm, deepseek, big-pickle, and many more — all reachable through
 `--model opencode/<name>`.
 
+## Review
+
+Browse the evidence log in a local, loopback-only web page — filter by
+skill/backend/status, expand a run to see its input/output/error:
+
+    sylvae review
+
+Opens at `http://127.0.0.1:8971/` by default. `--runs-dir`, `--host`, and
+`--port` override the defaults; `--host 0.0.0.0` allows LAN access if you
+actually want that (the default is loopback-only on purpose).
+
 ## Test
 
     pytest
