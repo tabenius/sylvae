@@ -10,6 +10,7 @@ from sylvae.cli import main
 
 def make_record(status: str = "ok", error: str | None = None) -> EvidenceRecord:
     return EvidenceRecord(
+        run_id="deadbeef" * 4,
         skill="summarize-diff", backend="anthropic", model="claude-sonnet-5",
         input_summary="x", output="the output", duration_ms=1,
         status=status, timestamp="2026-08-23T10:00:00+00:00", error=error,

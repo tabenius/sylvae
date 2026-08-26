@@ -7,6 +7,10 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class EvidenceRecord:
+    # First field so it leads every serialised line, which makes the log
+    # readable by eye. Required, never defaulted: a default would let
+    # distinct runs silently share an id and merge downstream.
+    run_id: str
     skill: str
     backend: str
     model: str

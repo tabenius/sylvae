@@ -171,6 +171,7 @@ def test_post_run_triggers_run_skill_and_shows_result(mock_run_skill, tmp_path):
     (tmp_path / "runs").mkdir()
     _make_skill_fixture(tmp_path / "skills", "summarize-diff")
     mock_run_skill.return_value = EvidenceRecord(
+        run_id="b" * 32,
         skill="summarize-diff", backend="ollama", model="ollama/mistral:latest",
         input_summary="hello", output="a real result", duration_ms=42,
         status="ok", timestamp="2026-08-24T10:00:00Z", error=None,
@@ -205,6 +206,7 @@ def test_post_run_forwards_model_override(mock_run_skill, tmp_path):
     (tmp_path / "runs").mkdir()
     _make_skill_fixture(tmp_path / "skills", "summarize-diff")
     mock_run_skill.return_value = EvidenceRecord(
+        run_id="b" * 32,
         skill="summarize-diff", backend="ollama", model="ollama/mistral:latest",
         input_summary="hello", output="ok", duration_ms=1,
         status="ok", timestamp="2026-08-24T10:00:00Z", error=None,
@@ -305,6 +307,7 @@ def test_post_run_allows_matching_same_origin_request(mock_run_skill, tmp_path):
     (tmp_path / "runs").mkdir()
     _make_skill_fixture(tmp_path / "skills", "summarize-diff")
     mock_run_skill.return_value = EvidenceRecord(
+        run_id="b" * 32,
         skill="summarize-diff", backend="ollama", model="ollama/mistral:latest",
         input_summary="hi", output="ok", duration_ms=1,
         status="ok", timestamp="2026-08-24T10:00:00Z", error=None,

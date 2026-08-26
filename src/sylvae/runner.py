@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -121,6 +122,7 @@ def run_skill(
     result = backend.run(prompt, skill, **run_kwargs)
 
     record = EvidenceRecord(
+        run_id=uuid.uuid4().hex,
         skill=skill.slug,
         backend=resolved_backend_name,
         model=result.model,

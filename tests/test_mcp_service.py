@@ -18,6 +18,7 @@ def _service(tmp_path: Path, **kw) -> McpToolService:
 
 def _record(**over) -> EvidenceRecord:
     base = dict(
+        run_id="a" * 32,
         skill="s", backend="ollama", model="ollama/mistral:latest", input_summary="x",
         output="the output", duration_ms=12, status="ok",
         timestamp="2026-08-24T12:00:00Z", error=None,
