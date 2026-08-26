@@ -36,10 +36,23 @@ choice, not the cheap one:
 | --- | --- | --- |
 | `cheap` | `ollama` | local, free, unlimited |
 | `frontier` | `opencode` | capable, and on its own account — automatic routing shouldn't quietly spend your interactive Claude budget |
+| `agent` | `shellout` (Codex) | a real agent harness with tools, for work that needs more than one step |
 
-Override per tier with `SYLVAE_BACKEND_CHEAP` / `SYLVAE_BACKEND_FRONTIER`.
-The right target genuinely differs per operator, and hardcoding it is what
-previously left `auto` broken for every non-cheap skill.
+`agent` is a distinct tier rather than "expensive frontier" because Codex
+and OpenCode aren't more-expensive Ollama — their bootstrap overhead is
+*fixed regardless of task size* (~6s/11.5k tokens for a trivial Codex
+prompt). That makes them a poor fit for small work and a good one for
+anything genuinely needing tool use.
+
+Override per tier with `SYLVAE_BACKEND_CHEAP` / `SYLVAE_BACKEND_FRONTIER` /
+`SYLVAE_BACKEND_AGENT`. The right target genuinely differs per operator,
+and hardcoding it is what previously left `auto` broken for every non-cheap
+skill.
+
+The tier value is validated at load time. `tier: cheep` is a clear error,
+not a silent fallthrough — a typo that quietly routes to the most expensive
+backend is the kind of mistake you'd only notice on the bill. An empty
+`tier:` is an error too; omit the key entirely if you mean "unset".
 
     sylvae run skills/disk-report --backend auto --input path/to/disk-usage.txt
 

@@ -54,6 +54,11 @@ def build_prompt(skill: Skill, resolved_input: str) -> str:
 DEFAULT_TIER_BACKENDS: dict[str, str] = {
     "cheap": "ollama",
     "frontier": "opencode",
+    # Codex: a real agent harness with tools, on its own account. Kept
+    # distinct from the frontier target on purpose -- if the two collapsed
+    # to one backend the tier would carry no information and the vocabulary
+    # would be lying about what it expresses.
+    "agent": "shellout",
 }
 
 # Skills with no declared tier fall here: the safe choice, not the cheap

@@ -16,6 +16,13 @@ class SkillLoadError(Exception):
 # Leading dot excluded so hidden directories are not addressable either.
 _SAFE_SLUG = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 
+# The tier vocabulary. "agent" exists because Codex and OpenCode are not
+# "expensive Ollama" or "cheap Anthropic" -- they are full agent harnesses
+# whose bootstrap overhead is fixed regardless of task size, which makes
+# them a poor fit for small work and a good one for anything genuinely
+# needing tool use or multiple steps.
+VALID_TIERS = {"cheap", "frontier", "agent"}
+
 
 def validate_skill_slug(slug: str) -> str:
     """Reject any slug that is not a plain directory name.
@@ -91,11 +98,32 @@ def load_skill(skill_dir: str | Path) -> Skill:
         if key not in meta:
             raise SkillLoadError(f"{skill_file} frontmatter is missing required key '{key}'")
 
+    # Strict: an unrecognised tier is an error, never a silent fallthrough.
+    # A typo like `tier: cheep` would otherwise route to the most expensive
+    # backend, and nobody would notice until the bill.
+    #
+    # Absence of the key means "unset", which is legitimate. But the key
+    # PRESENT and empty (`tier:` on its own, which YAML reads as null) is an
+    # authoring mistake -- someone meant to declare a tier and left it
+    # blank. Those two are indistinguishable after parsing, so presence is
+    # checked separately rather than relying on the parsed value.
+    tier = meta.get("tier")
+    if "tier" in meta and not tier:
+        raise SkillLoadError(
+            f"{skill_file} declares an empty tier; give it one of "
+            f"{', '.join(sorted(VALID_TIERS))}, or remove the key entirely"
+        )
+    if tier is not None and tier not in VALID_TIERS:
+        raise SkillLoadError(
+            f"{skill_file} declares unknown tier {tier!r}; "
+            f"valid tiers are {', '.join(sorted(VALID_TIERS))} (or omit the key)"
+        )
+
     return Skill(
         slug=path.name,
         name=meta["name"],
         description=meta["description"],
         instructions=parts[2].strip(),
         path=path,
-        tier=meta.get("tier"),
+        tier=tier,
     )

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from sylvae.loader import SkillLoadError
 from sylvae.review import serve
 from sylvae.runner import BACKENDS, run_skill
 
@@ -58,7 +59,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "run":
-        record = run_skill(args.skill_path, args.backend, args.input, model=args.model)
+        # A malformed SKILL.md is an ordinary authoring mistake -- a tier
+        # typo, a missing key -- not an internal fault. Since tier values are
+        # now validated strictly, this is a path users will hit routinely,
+        # and a traceback is the wrong way to tell someone they wrote
+        # `tier: cheep`.
+        try:
+            record = run_skill(args.skill_path, args.backend, args.input, model=args.model)
+        except (SkillLoadError, ValueError) as exc:
+            print(f"[error] {exc}", file=sys.stderr)
+            return 1
         if record.output:
             print(record.output)
         if record.status != "ok":
