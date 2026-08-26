@@ -102,16 +102,12 @@ def test_resolve_backend_routes_cheap_tier_to_ollama():
     assert resolve_backend(skill, "auto") == "ollama"
 
 
-def test_resolve_backend_routes_frontier_tier_to_anthropic():
-    skill = Skill(slug="s", name="s", description="d", instructions="i", path=Path("."), tier="frontier")
-
-    assert resolve_backend(skill, "auto") == "anthropic"
-
-
-def test_resolve_backend_defaults_missing_tier_to_anthropic():
-    skill = Skill(slug="s", name="s", description="d", instructions="i", path=Path("."), tier=None)
-
-    assert resolve_backend(skill, "auto") == "anthropic"
+# Frontier-tier and unset-tier routing moved to tests/test_tier_routing.py.
+# The tests that lived here asserted the target was "anthropic", which was
+# the bug: it made --backend auto fail for every skill not marked cheap,
+# since no Anthropic credentials exist here. The replacements assert against
+# the tier map rather than a hardcoded backend name, so retargeting does not
+# silently break them again.
 
 
 def test_run_skill_auto_routes_cheap_tier_skill_to_ollama(tmp_path, monkeypatch):

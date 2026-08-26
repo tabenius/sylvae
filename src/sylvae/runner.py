@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -32,19 +34,64 @@ def build_prompt(skill: Skill, resolved_input: str) -> str:
     return f"{skill.instructions}\n\n---\n\nTask input:\n{resolved_input}"
 
 
+# Which concrete backend each tier routes to under `--backend auto`.
+#
+# "frontier" deliberately does NOT point at the Anthropic API backend. That
+# was the original mapping and it made `--backend auto` fail outright for
+# every skill not marked tier: cheap, because this machine has no Anthropic
+# API key and cannot obtain one -- an API key being a separate paid product
+# from a Claude subscription.
+#
+# It points at OpenCode instead, chosen for a specific reason: unlike
+# claudecode, OpenCode draws on its own account rather than the operator's
+# interactive Claude budget. Automatic routing should not quietly spend the
+# scarcest resource its owner has.
+#
+# Overridable per tier via SYLVAE_BACKEND_<TIER>, because hardcoding this is
+# precisely what produced the original bug and the right target genuinely
+# differs per operator.
+DEFAULT_TIER_BACKENDS: dict[str, str] = {
+    "cheap": "ollama",
+    "frontier": "opencode",
+}
+
+# Skills with no declared tier fall here: the safe choice, not the cheap
+# one. An author who has not thought about the tradeoff should not get
+# silently downgraded output.
+FALLBACK_TIER = "frontier"
+
+
+def tier_backends() -> dict[str, str]:
+    """Resolve the tier map, applying SYLVAE_BACKEND_<TIER> overrides.
+
+    Validates every target against BACKENDS, so a typo surfaces as a clear
+    error at routing time rather than as a confusing failure inside a
+    backend that does not exist.
+    """
+    resolved = dict(DEFAULT_TIER_BACKENDS)
+    for tier in resolved:
+        override = os.environ.get(f"SYLVAE_BACKEND_{tier.upper()}")
+        if override:
+            resolved[tier] = override
+    for tier, backend in resolved.items():
+        if backend not in BACKENDS:
+            raise ValueError(
+                f"tier {tier!r} is mapped to unknown backend {backend!r} "
+                f"(known: {', '.join(sorted(BACKENDS))})"
+            )
+    return resolved
+
+
 def resolve_backend(skill: Skill, requested_backend: str) -> str:
     """Map "auto" to a concrete backend using the skill's declared tier.
 
-    A skill with no declared tier defaults to "frontier" (the safe
-    choice) rather than silently getting downgraded to a cheap backend
-    nobody vetted it against. Any explicit (non-"auto") choice passes
-    through unchanged.
+    Any explicit (non-"auto") choice passes through unchanged -- a human
+    naming a backend is never overridden.
     """
     if requested_backend != "auto":
         return requested_backend
-    if skill.tier == "cheap":
-        return "ollama"
-    return "anthropic"
+    mapping = tier_backends()
+    return mapping.get(skill.tier or FALLBACK_TIER, mapping[FALLBACK_TIER])
 
 
 def run_skill(

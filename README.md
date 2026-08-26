@@ -29,8 +29,17 @@ leave it off:
 
 Or let the skill decide: `--backend auto` reads the `tier` a skill declares
 in its `SKILL.md` frontmatter (`tier: cheap` or `tier: frontier`) and routes
-to Ollama or Anthropic accordingly. A skill with no declared tier defaults to
-frontier — the safe choice, not the cheap one:
+accordingly. A skill with no declared tier defaults to frontier — the safe
+choice, not the cheap one:
+
+| tier | default backend | why |
+| --- | --- | --- |
+| `cheap` | `ollama` | local, free, unlimited |
+| `frontier` | `opencode` | capable, and on its own account — automatic routing shouldn't quietly spend your interactive Claude budget |
+
+Override per tier with `SYLVAE_BACKEND_CHEAP` / `SYLVAE_BACKEND_FRONTIER`.
+The right target genuinely differs per operator, and hardcoding it is what
+previously left `auto` broken for every non-cheap skill.
 
     sylvae run skills/disk-report --backend auto --input path/to/disk-usage.txt
 
