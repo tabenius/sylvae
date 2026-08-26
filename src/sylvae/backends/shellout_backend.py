@@ -3,7 +3,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from sylvae.backends.base import BackendResult, InvalidModelName
+from sylvae.backends.base import DEFAULT_BACKEND_TIMEOUT, BackendResult, InvalidModelName
 from sylvae.backends.subprocess_utils import guard_model, run_subprocess_backend
 from sylvae.loader import Skill
 
@@ -19,7 +19,7 @@ class ShelloutBackend:
 
     name = "shellout"
 
-    def __init__(self, command: str = "codex", timeout: float = 180.0):
+    def __init__(self, command: str = "codex", timeout: float = DEFAULT_BACKEND_TIMEOUT):
         self.command = command
         self.timeout = timeout
 

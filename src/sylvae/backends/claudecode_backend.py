@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 
-from sylvae.backends.base import BackendResult, InvalidModelName, elapsed_ms
+from sylvae.backends.base import DEFAULT_BACKEND_TIMEOUT, BackendResult, InvalidModelName, elapsed_ms
 from sylvae.backends.subprocess_utils import guard_model, run_subprocess_backend
 from sylvae.loader import Skill
 
@@ -79,7 +79,7 @@ class ClaudeCodeBackend:
 
     name = "claudecode"
 
-    def __init__(self, command: str = "claude", timeout: float = 180.0):
+    def __init__(self, command: str = "claude", timeout: float = DEFAULT_BACKEND_TIMEOUT):
         self.command = command
         self.timeout = timeout
 

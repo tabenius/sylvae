@@ -53,6 +53,7 @@ def run_skill(
     raw_input: str,
     runs_dir: str | Path = "runs",
     model: str | None = None,
+    timeout: float | None = None,
 ) -> EvidenceRecord:
     if backend_name != "auto" and backend_name not in BACKENDS:
         raise ValueError(f"unknown backend: {backend_name!r} (known: {sorted(BACKENDS)} + 'auto')")
@@ -65,7 +66,10 @@ def run_skill(
     resolved_input = resolve_input(raw_input)
     prompt = build_prompt(skill, resolved_input)
 
-    backend = BACKENDS[resolved_backend_name]()
+    # Every backend accepts a timeout; passing it here is what actually
+    # bounds the call. Callers that leave it None get the backend default.
+    backend_kwargs = {} if timeout is None else {"timeout": timeout}
+    backend = BACKENDS[resolved_backend_name](**backend_kwargs)
     run_kwargs = {"model": model} if model else {}
     result = backend.run(prompt, skill, **run_kwargs)
 

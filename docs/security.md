@@ -55,6 +55,45 @@ through a shell. But a model id containing them is malformed under any
 reading, and refusing them now means a future backend that does build a
 command string cannot quietly reintroduce the question.
 
+### Unbounded calls and request bodies
+
+Three availability gaps, found by inspection rather than by anything
+breaking:
+
+**Two backends had no timeout at all on the model call.** Only Ollama's 3s
+availability probe was bounded; `litellm.completion()` and
+`client.messages.create()` were not. A hung or slow server hung Sylvae
+itself — the CLI, a review-server thread, or the MCP server. All five
+backends now take a `timeout` and enforce it on the call.
+
+**The MCP timeout was dead config.** `McpToolService` stored it, the
+docstring advertised it as stricter than the CLI's 180s, and it was never
+passed to anything — `run_skill()` did not even accept one. MCP calls
+actually ran to the backend default. Config that *looks* enforced is worse
+than none, because it is believed. `run_skill()` now takes a timeout and
+forwards it to backend construction; tested end to end.
+
+**The review server read `Content-Length` bytes with no cap and no
+validation.** Garbage raised `ValueError` into a traceback; a large value
+was a memory-exhaustion lever for anyone who could reach the port. Now
+capped at `MAX_REQUEST_BYTES` (1 MB) and validated, rejecting on the
+*declared* size before any body is read. Verified live: garbage → 400,
+a header claiming 900 MB → 413 with nothing read, 2 MB body → 413,
+ordinary requests unaffected.
+
+MCP input is separately capped at `MAX_INPUT_CHARS` (100k). An unbounded
+prompt is unbounded cost, and that surface is driven by a model passing
+text that may itself have come from somewhere untrusted.
+
+## Tested and NOT vulnerable
+
+Recorded so nobody spends time "fixing" it: **YAML alias-expansion bombs
+against `SKILL.md`**. A billion-laughs payload was constructed and run
+through `yaml.safe_load()` — 352 source bytes, nine levels of aliasing.
+It completed in under 0.1s at 11 MB RSS, because PyYAML shares alias
+references rather than deep-copying them. There is no blowup to defend
+against here.
+
 ## Accepted, with reasons
 
 ### Subprocess environment inheritance

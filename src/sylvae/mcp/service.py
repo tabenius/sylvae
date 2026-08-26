@@ -38,6 +38,13 @@ _AUTO = "auto"
 # assuming it hung, so this path is stricter than the CLI's 180s.
 DEFAULT_MCP_TIMEOUT = 90.0
 
+# An unbounded prompt is unbounded cost, and this surface is driven by a
+# model rather than a person: the text it passes may itself have come from
+# somewhere untrusted. 100k characters is far above any real skill input
+# here (the largest so far is a few KB of diff) and far below anything that
+# would run up a surprising bill.
+MAX_INPUT_CHARS = 100_000
+
 
 class McpToolService:
     """Sylvae operations exposed to MCP callers, with cost and recursion
@@ -78,6 +85,11 @@ class McpToolService:
         backend: str | None = None,
         model: str | None = None,
     ) -> dict[str, Any]:
+        if len(input) > MAX_INPUT_CHARS:
+            return self._error(
+                f"input too large: {len(input)} characters, limit {MAX_INPUT_CHARS}"
+            )
+
         chosen = backend or self.default_backend
 
         if chosen == _AUTO:
@@ -113,7 +125,7 @@ class McpToolService:
         try:
             record = run_skill(
                 str(skill_path), chosen, input,
-                runs_dir=str(self.runs_dir), model=model,
+                runs_dir=str(self.runs_dir), model=model, timeout=self.timeout,
             )
         except Exception as exc:  # never surface a traceback through a tool call
             return self._error(f"run failed: {type(exc).__name__}: {exc}")

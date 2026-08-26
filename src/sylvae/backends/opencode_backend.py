@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from sylvae.backends.base import BackendResult, InvalidModelName
+from sylvae.backends.base import DEFAULT_BACKEND_TIMEOUT, BackendResult, InvalidModelName
 from sylvae.backends.subprocess_utils import guard_model, run_subprocess_backend
 from sylvae.loader import Skill
 
@@ -40,7 +40,7 @@ class OpenCodeBackend:
 
     name = "opencode"
 
-    def __init__(self, command: str = "opencode", model: str = "opencode/big-pickle", timeout: float = 180.0):
+    def __init__(self, command: str = "opencode", model: str = "opencode/big-pickle", timeout: float = DEFAULT_BACKEND_TIMEOUT):
         self.command = command
         self.model = model
         self.timeout = timeout

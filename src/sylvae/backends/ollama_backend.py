@@ -8,7 +8,7 @@ import urllib.request
 import litellm
 from litellm.exceptions import APIConnectionError
 
-from sylvae.backends.base import BackendResult, elapsed_ms
+from sylvae.backends.base import DEFAULT_BACKEND_TIMEOUT, BackendResult, elapsed_ms
 from sylvae.loader import Skill
 
 
@@ -35,9 +35,15 @@ def _check_model_availability(api_base: str, model: str, timeout: float = 3.0) -
 class OllamaBackend:
     name = "ollama"
 
-    def __init__(self, model: str = "ollama/qwen2.5:14b", api_base: str = "http://localhost:11434"):
+    def __init__(
+        self,
+        model: str = "ollama/qwen2.5:14b",
+        api_base: str = "http://localhost:11434",
+        timeout: float = DEFAULT_BACKEND_TIMEOUT,
+    ):
         self.model = model
         self.api_base = api_base
+        self.timeout = timeout
 
     def run(self, prompt: str, skill: Skill, **kwargs: str) -> BackendResult:
         model = kwargs.get("model", self.model)
@@ -64,6 +70,7 @@ class OllamaBackend:
                 model=model,
                 api_base=self.api_base,
                 messages=[{"role": "user", "content": prompt}],
+                timeout=self.timeout,
             )
         except APIConnectionError as exc:
             return BackendResult(

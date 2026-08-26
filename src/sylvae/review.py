@@ -10,6 +10,12 @@ from pathlib import Path
 from sylvae.loader import Skill, SkillLoadError, load_skill, resolve_skill_dir
 from sylvae.runner import BACKENDS, run_skill
 
+# A POST body is read into memory in one go, so an unvalidated
+# Content-Length is a memory-exhaustion lever for anyone who can reach the
+# port. Generous next to a real skill input (a few KB of diff), small next
+# to anything that would hurt.
+MAX_REQUEST_BYTES = 1_000_000
+
 _STATUS_COLORS = {"ok": "#2e7d46", "failed": "#b3261e", "unavailable": "#9a6300"}
 
 
@@ -253,8 +259,28 @@ class _ReviewHandler(BaseHTTPRequestHandler):
             self._write_html(render_error("cross-origin request rejected"), status=403)
             return
 
-        length = int(self.headers.get("Content-Length", 0))
-        raw_body = self.rfile.read(length).decode("utf-8")
+        # int() on a client-supplied header raises on garbage, which would
+        # surface as a traceback and a dropped connection rather than a
+        # response. Treat an unparseable length as a bad request.
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            self._write_html(render_error("invalid Content-Length"), status=400)
+            return
+
+        if length < 0 or length > MAX_REQUEST_BYTES:
+            self._write_html(
+                render_error(f"request body too large (limit {MAX_REQUEST_BYTES} bytes)"),
+                status=413,
+            )
+            return
+
+        try:
+            raw_body = self.rfile.read(length).decode("utf-8")
+        except UnicodeDecodeError:
+            self._write_html(render_error("request body must be UTF-8"), status=400)
+            return
+
         fields = urllib.parse.parse_qs(raw_body)
         skill_slug = (fields.get("skill") or [""])[0]
         backend = (fields.get("backend") or [""])[0]

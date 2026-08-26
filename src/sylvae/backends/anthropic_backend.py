@@ -2,15 +2,21 @@ from __future__ import annotations
 
 from anthropic import Anthropic, APIConnectionError
 
-from sylvae.backends.base import BackendResult, elapsed_ms
+from sylvae.backends.base import DEFAULT_BACKEND_TIMEOUT, BackendResult, elapsed_ms
 from sylvae.loader import Skill
 
 
 class AnthropicBackend:
     name = "anthropic"
 
-    def __init__(self, model: str = "claude-sonnet-5", api_key: str | None = None):
+    def __init__(
+        self,
+        model: str = "claude-sonnet-5",
+        api_key: str | None = None,
+        timeout: float = DEFAULT_BACKEND_TIMEOUT,
+    ):
         self.model = model
+        self.timeout = timeout
         self._client = Anthropic(api_key=api_key)
 
     def run(self, prompt: str, skill: Skill, **kwargs: str) -> BackendResult:
@@ -23,6 +29,7 @@ class AnthropicBackend:
                 model=model,
                 max_tokens=2048,
                 messages=[{"role": "user", "content": prompt}],
+                timeout=self.timeout,
             )
         except APIConnectionError as exc:
             return BackendResult(

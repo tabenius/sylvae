@@ -8,6 +8,13 @@ from typing import Protocol
 from sylvae.loader import Skill
 
 
+# Every backend bounds its call with this unless told otherwise. Two of them
+# previously had no timeout at all on the model call -- only Ollama's 3s
+# availability probe was bounded -- so a hung server hung Sylvae itself:
+# the CLI, a review-server thread, or the MCP server.
+DEFAULT_BACKEND_TIMEOUT: float = 180.0
+
+
 class InvalidModelName(ValueError):
     """Raised when a model identifier could be mistaken for a CLI flag."""
 
