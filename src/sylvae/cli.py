@@ -21,6 +21,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Override the backend's default model (e.g. 'ollama/mistral:latest'). Omit to use the backend's default.",
     )
+    run_parser.add_argument(
+        "--run-id",
+        default=None,
+        help=(
+            "Use a preallocated 32-character UUID hex run id. This lets a "
+            "coordinator attribute external evidence to sylvae:run/<id>."
+        ),
+    )
 
     mcp_parser = subparsers.add_parser(
         "mcp", help="Run an MCP server exposing skills to agents (needs the 'mcp' extra)"
@@ -65,7 +73,13 @@ def main(argv: list[str] | None = None) -> int:
         # and a traceback is the wrong way to tell someone they wrote
         # `tier: cheep`.
         try:
-            record = run_skill(args.skill_path, args.backend, args.input, model=args.model)
+            record = run_skill(
+                args.skill_path,
+                args.backend,
+                args.input,
+                model=args.model,
+                run_id=args.run_id,
+            )
         except (SkillLoadError, ValueError) as exc:
             print(f"[error] {exc}", file=sys.stderr)
             return 1
