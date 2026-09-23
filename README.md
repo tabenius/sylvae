@@ -146,7 +146,10 @@ a cheaper model mid-task instead of doing it inline:
         --skills-dir /path/to/skills --runs-dir /path/to/runs
 
 Two tools: `sylvae_list_skills` and `sylvae_run_skill`. Runs still land in
-the evidence log exactly as CLI runs do.
+the evidence log exactly as CLI runs do. The run result includes `run_id` and
+its namespaced `runtime_ref`. A coordinator may also supply the optional
+canonical `run_id` before execution, allowing an MCP-triggered run and external
+WeftMark evidence to share the same `sylvae:run/<id>` identity.
 
 **Two guards, on by default.** Runs default to the cheap local backend — an
 agent calling Sylvae and landing on something as expensive as itself has
