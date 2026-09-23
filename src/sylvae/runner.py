@@ -12,7 +12,7 @@ from sylvae.backends.claudecode_backend import ClaudeCodeBackend
 from sylvae.backends.ollama_backend import OllamaBackend
 from sylvae.backends.opencode_backend import OpenCodeBackend
 from sylvae.backends.shellout_backend import ShelloutBackend
-from sylvae.evidence import EvidenceRecord, append_evidence
+from sylvae.evidence import EvidenceRecord, append_evidence, validate_run_id
 from sylvae.loader import Skill, load_skill
 
 BACKENDS: dict[str, type[Backend]] = {
@@ -107,9 +107,11 @@ def run_skill(
     runs_dir: str | Path = "runs",
     model: str | None = None,
     timeout: float | None = None,
+    run_id: str | None = None,
 ) -> EvidenceRecord:
     if backend_name != "auto" and backend_name not in BACKENDS:
         raise ValueError(f"unknown backend: {backend_name!r} (known: {sorted(BACKENDS)} + 'auto')")
+    resolved_run_id = uuid.uuid4().hex if run_id is None else validate_run_id(run_id)
 
     skill = load_skill(skill_path)
     resolved_backend_name = resolve_backend(skill, backend_name)
@@ -127,7 +129,7 @@ def run_skill(
     result = backend.run(prompt, skill, **run_kwargs)
 
     record = EvidenceRecord(
-        run_id=uuid.uuid4().hex,
+        run_id=resolved_run_id,
         skill=skill.slug,
         backend=resolved_backend_name,
         model=result.model,
