@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -11,6 +12,17 @@ from pathlib import Path
 # uses this namespaced form so the run stays resolvable back here. Keep the
 # scheme stable -- consumers match on the ``sylvae:`` prefix.
 RUNTIME_SCHEME = "sylvae"
+
+
+def validate_run_id(value: str) -> str:
+    """Return a canonical Sylvae run id or reject an invalid external id."""
+    try:
+        parsed = uuid.UUID(value)
+    except (AttributeError, ValueError) as exc:
+        raise ValueError("run id must be 32 lowercase hexadecimal characters") from exc
+    if value != parsed.hex or parsed.version != 4:
+        raise ValueError("run id must be 32 lowercase hexadecimal characters")
+    return value
 
 
 @dataclass(frozen=True)
