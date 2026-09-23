@@ -100,6 +100,19 @@ def test_main_omits_model_kwarg_when_flag_not_given(mock_run_skill):
 
 
 @patch("sylvae.cli.run_skill")
+def test_main_forwards_preallocated_run_id(mock_run_skill):
+    mock_run_skill.return_value = make_record(status="ok")
+    run_id = "12345678123442348234123456789abc"
+
+    main([
+        "run", "skills/summarize-diff", "--backend", "anthropic",
+        "--input", "hi", "--run-id", run_id,
+    ])
+
+    assert mock_run_skill.call_args.kwargs["run_id"] == run_id
+
+
+@patch("sylvae.cli.run_skill")
 def test_main_accepts_auto_backend(mock_run_skill):
     mock_run_skill.return_value = make_record(status="ok")
 
