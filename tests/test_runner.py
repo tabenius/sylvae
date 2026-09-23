@@ -45,6 +45,34 @@ def test_run_skill_writes_evidence_and_returns_record(tmp_path, monkeypatch):
     assert (tmp_path / f"{record.timestamp[:10]}.jsonl").exists()
 
 
+def test_run_skill_uses_valid_preallocated_run_id(tmp_path, monkeypatch):
+    fake_backend = MagicMock()
+    fake_backend.run.return_value = BackendResult(
+        output="a summary", model="fake-model", duration_ms=10, status="ok"
+    )
+    monkeypatch.setitem(BACKENDS, "fake", MagicMock(return_value=fake_backend))
+    run_id = "12345678123442348234123456789abc"
+
+    record = run_skill(
+        SKILL_PATH, "fake", "some input", runs_dir=tmp_path, run_id=run_id
+    )
+
+    assert record.run_id == run_id
+    assert record.runtime_ref == f"sylvae:run/{run_id}"
+
+
+def test_run_skill_rejects_noncanonical_preallocated_run_id(tmp_path, monkeypatch):
+    monkeypatch.setitem(BACKENDS, "fake", MagicMock())
+    with pytest.raises(ValueError, match="32 lowercase hexadecimal"):
+        run_skill(
+            SKILL_PATH,
+            "fake",
+            "some input",
+            runs_dir=tmp_path,
+            run_id="not-a-run-id",
+        )
+
+
 def test_run_skill_rejects_unknown_backend(tmp_path):
     with pytest.raises(ValueError):
         run_skill(SKILL_PATH, "not-a-real-backend", "input", runs_dir=tmp_path)
