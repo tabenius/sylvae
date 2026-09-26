@@ -25,6 +25,16 @@ def validate_run_id(value: str) -> str:
     return value
 
 
+def runtime_ref_for(run_id: str) -> str:
+    """The cross-system identity for a run id: ``sylvae:run/<run_id>``.
+
+    The single source of this format, so callers -- and
+    ``EvidenceRecord.runtime_ref`` -- never re-spell it by hand. Consumers
+    match on the ``sylvae:`` prefix; keep it stable.
+    """
+    return f"{RUNTIME_SCHEME}:run/{run_id}"
+
+
 @dataclass(frozen=True)
 class EvidenceRecord:
     # First field so it leads every serialised line, which makes the log
@@ -50,7 +60,7 @@ class EvidenceRecord:
         stays byte-stable. Callers that hand a run's identity to another system
         should use this rather than re-formatting ``run_id`` by hand.
         """
-        return f"{RUNTIME_SCHEME}:run/{self.run_id}"
+        return runtime_ref_for(self.run_id)
 
 
 def append_evidence(record: EvidenceRecord, runs_dir: str | Path = "runs") -> Path:
