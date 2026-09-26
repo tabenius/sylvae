@@ -130,8 +130,12 @@ model, paste input, submit):
     sylvae review
 
 Opens at `http://127.0.0.1:8971/` by default. `--runs-dir`, `--skills-dir`,
-`--host`, and `--port` override the defaults; `--host 0.0.0.0` allows LAN
-access if you actually want that (the default is loopback-only on purpose).
+`--host`, and `--port` override the defaults. Without a token the server
+answers only to loopback `Host` names (`127.0.0.1`, `localhost`, `[::1]`), so a
+DNS-rebinding page cannot use it. To share it (e.g. `--host 0.0.0.0`), set
+`SYLVAE_REVIEW_TOKEN` in the environment: every request must then send
+`Authorization: Bearer <token>`, and binding beyond loopback without one is
+refused.
 Triggered runs use real backends — a run through `shellout`/`opencode` can
 take a while and costs the same as running it from the CLI; there's no
 "cheap preview" mode.
