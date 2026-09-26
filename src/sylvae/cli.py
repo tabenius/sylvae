@@ -87,6 +87,20 @@ def main(argv: list[str] | None = None) -> int:
         help="Emit a JSON array (includes each run's runtime_ref) instead of a table.",
     )
 
+    show_parser = subparsers.add_parser(
+        "show", help="Show one recorded run's full detail (input, output, error) by run id"
+    )
+    show_parser.add_argument(
+        "run_id",
+        help="The run's id, or an unambiguous prefix of it.",
+    )
+    show_parser.add_argument("--runs-dir", default="runs")
+    show_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit the raw record (plus its runtime_ref) as JSON.",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "run":
@@ -194,6 +208,58 @@ def main(argv: list[str] | None = None) -> int:
         ]
         for cols in (headers, *rows):
             print("  ".join(cols[i].ljust(widths[i]) for i in range(len(headers))))
+        return 0
+
+    if args.command == "show":
+        records = load_all_runs(args.runs_dir)
+        want = args.run_id
+        exact = [r for r in records if r.get("run_id") == want]
+        # Fall back to an unambiguous prefix so a short id works (run ids are
+        # 32 hex chars); an ambiguous prefix is refused rather than guessed.
+        matches = exact or [
+            r for r in records if str(r.get("run_id", "")).startswith(want)
+        ]
+        if not matches:
+            print(f"No run found for '{want}'.", file=sys.stderr)
+            return 1
+        if len(matches) > 1 and not exact:
+            ids = ", ".join(sorted(str(r.get("run_id", "")) for r in matches)[:5])
+            print(
+                f"'{want}' is ambiguous ({len(matches)} runs match): {ids}...",
+                file=sys.stderr,
+            )
+            return 1
+        record = matches[0]
+        run_id = str(record.get("run_id", ""))
+
+        if args.json:
+            # The stored record verbatim, plus the derived runtime_ref that never
+            # lands in the log.
+            print(json.dumps({**record, "runtime_ref": runtime_ref_for(run_id)}, indent=2))
+            return 0
+
+        fields = (
+            ("run_id", run_id),
+            ("runtime_ref", runtime_ref_for(run_id)),
+            ("skill", record.get("skill", "")),
+            ("backend", record.get("backend", "")),
+            ("model", record.get("model", "")),
+            ("status", record.get("status", "")),
+            ("duration_ms", record.get("duration_ms", "")),
+            ("timestamp", record.get("timestamp", "")),
+        )
+        label_width = max(len(name) for name, _ in fields)
+        for name, value in fields:
+            print(f"{name.ljust(label_width)}  {value}")
+        if record.get("input_summary"):
+            print("\n--- input ---")
+            print(record["input_summary"])
+        if record.get("output"):
+            print("\n--- output ---")
+            print(record["output"])
+        if record.get("error"):
+            print("\n--- error ---")
+            print(record["error"])
         return 0
 
     return 1

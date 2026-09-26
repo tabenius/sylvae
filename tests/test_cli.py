@@ -214,3 +214,55 @@ def test_runs_empty_log_is_not_an_error(tmp_path, capsys):
     exit_code = main(["runs", "--runs-dir", str(tmp_path / "nope")])
     assert exit_code == 0
     assert "No runs recorded." in capsys.readouterr().err
+
+
+def test_show_json_returns_the_record_with_runtime_ref(tmp_path, capsys):
+    _seed_runs(tmp_path)
+
+    exit_code = main(["show", "b" * 32, "--runs-dir", str(tmp_path), "--json"])
+
+    assert exit_code == 0
+    record = json.loads(capsys.readouterr().out)
+    assert record["run_id"] == "b" * 32
+    assert record["runtime_ref"] == "sylvae:run/" + "b" * 32
+    assert record["skill"] == "disk-report"
+    assert record["error"] == "boom"
+
+
+def test_show_accepts_an_unambiguous_prefix_and_prints_detail(tmp_path, capsys):
+    _seed_runs(tmp_path)
+
+    exit_code = main(["show", "aaaa", "--runs-dir", str(tmp_path)])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "sylvae:run/" + "a" * 32 in out
+    assert "summarize-diff" in out
+    assert "--- output ---" in out  # the recorded output section is shown
+
+
+def test_show_unknown_run_id_is_an_error(tmp_path, capsys):
+    _seed_runs(tmp_path)
+
+    exit_code = main(["show", "does-not-exist", "--runs-dir", str(tmp_path)])
+
+    assert exit_code == 1
+    assert "No run found" in capsys.readouterr().err
+
+
+def test_show_ambiguous_prefix_is_refused_not_guessed(tmp_path, capsys):
+    # Two runs whose ids share a prefix.
+    for suffix in ("1", "2"):
+        append_evidence(
+            EvidenceRecord(
+                run_id="cafe" + suffix + "0" * 27, skill="s", backend="ollama",
+                model="m", input_summary="i", output="o", duration_ms=1,
+                status="ok", timestamp="2026-08-25T0" + suffix + ":00:00+00:00",
+            ),
+            runs_dir=tmp_path,
+        )
+
+    exit_code = main(["show", "cafe", "--runs-dir", str(tmp_path)])
+
+    assert exit_code == 1
+    assert "ambiguous" in capsys.readouterr().err
