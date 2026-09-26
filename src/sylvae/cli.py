@@ -4,10 +4,42 @@ import argparse
 import json
 import sys
 
+from sylvae.color import color_enabled, paint, status_styles
 from sylvae.evidence import runtime_ref_for
 from sylvae.loader import SkillLoadError
 from sylvae.review import ReviewConfigError, load_all_runs, serve
 from sylvae.runner import BACKENDS, run_skill
+
+
+def _completion_script(shell: str, commands: list[str]) -> str:
+    """A dependency-free completion script for ``sylvae`` that completes the
+    top-level subcommands. Derived from the live command list so it stays in
+    sync with the parser."""
+    cmds = " ".join(commands)
+    if shell == "bash":
+        return (
+            "# sylvae bash completion.\n"
+            '# Setup: eval "$(sylvae completion bash)"  (add to ~/.bashrc), or\n'
+            "#   sylvae completion bash | sudo tee /etc/bash_completion.d/sylvae\n"
+            "_sylvae_complete() {\n"
+            '    local cur="${COMP_WORDS[COMP_CWORD]}"\n'
+            '    if [ "$COMP_CWORD" -eq 1 ]; then\n'
+            f'        COMPREPLY=( $(compgen -W "{cmds}" -- "$cur") )\n'
+            "    fi\n"
+            "}\n"
+            "complete -F _sylvae_complete sylvae\n"
+        )
+    if shell == "fish":
+        lines = [
+            "# sylvae fish completion.",
+            "# Setup: sylvae completion fish > ~/.config/fish/completions/sylvae.fish",
+            "complete -c sylvae -f",
+        ]
+        lines += [
+            f"complete -c sylvae -n __fish_use_subcommand -a {cmd}" for cmd in commands
+        ]
+        return "\n".join(lines) + "\n"
+    raise ValueError(f"unsupported shell: {shell}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -101,7 +133,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Emit the raw record (plus its runtime_ref) as JSON.",
     )
 
+    completion_parser = subparsers.add_parser(
+        "completion", help="Print a shell completion script (bash or fish)"
+    )
+    completion_parser.add_argument("shell", choices=("bash", "fish"))
+
     args = parser.parse_args(argv)
+
+    if args.command == "completion":
+        print(_completion_script(args.shell, sorted(subparsers.choices)), end="")
+        return 0
 
     if args.command == "run":
         # A malformed SKILL.md is an ordinary authoring mistake -- a tier
@@ -124,7 +165,10 @@ def main(argv: list[str] | None = None) -> int:
             print(record.output)
         if record.status != "ok":
             detail = record.error or "skill run did not complete successfully"
-            print(f"[{record.status}] {detail}", file=sys.stderr)
+            tag = paint(
+                f"[{record.status}]", *status_styles(record.status), stream=sys.stderr
+            )
+            print(f"{tag} {detail}", file=sys.stderr)
             return 1
         return 0
 
@@ -206,8 +250,24 @@ def main(argv: list[str] | None = None) -> int:
             max(len(headers[i]), *(len(row[i]) for row in rows))
             for i in range(len(headers))
         ]
-        for cols in (headers, *rows):
-            print("  ".join(cols[i].ljust(widths[i]) for i in range(len(headers))))
+        use_color = color_enabled()
+
+        def _render(cols: tuple[str, ...], *, is_header: bool) -> str:
+            out = []
+            for i in range(len(headers)):
+                # Pad on the plain text, then color -- ANSI codes are
+                # zero-width, so columns stay aligned.
+                cell = cols[i].ljust(widths[i])
+                if is_header:
+                    cell = paint(cell, "bold", enabled=use_color)
+                elif i == 1:  # STATUS
+                    cell = paint(cell, *status_styles(cols[i]), enabled=use_color)
+                out.append(cell)
+            return "  ".join(out)
+
+        print(_render(headers, is_header=True))
+        for row in rows:
+            print(_render(row, is_header=False))
         return 0
 
     if args.command == "show":
@@ -249,16 +309,20 @@ def main(argv: list[str] | None = None) -> int:
             ("timestamp", record.get("timestamp", "")),
         )
         label_width = max(len(name) for name, _ in fields)
+        use_color = color_enabled()
         for name, value in fields:
-            print(f"{name.ljust(label_width)}  {value}")
+            shown = value
+            if name == "status":
+                shown = paint(str(value), *status_styles(str(value)), enabled=use_color)
+            print(f"{name.ljust(label_width)}  {shown}")
         if record.get("input_summary"):
-            print("\n--- input ---")
+            print("\n" + paint("--- input ---", "bold", enabled=use_color))
             print(record["input_summary"])
         if record.get("output"):
-            print("\n--- output ---")
+            print("\n" + paint("--- output ---", "bold", enabled=use_color))
             print(record["output"])
         if record.get("error"):
-            print("\n--- error ---")
+            print("\n" + paint("--- error ---", "bold", "red", enabled=use_color))
             print(record["error"])
         return 0
 

@@ -266,3 +266,35 @@ def test_show_ambiguous_prefix_is_refused_not_guessed(tmp_path, capsys):
 
     assert exit_code == 1
     assert "ambiguous" in capsys.readouterr().err
+
+
+def test_completion_bash_emits_a_sourceable_script(capsys):
+    exit_code = main(["completion", "bash"])
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "complete -F _sylvae_complete sylvae" in out
+    # Derived from the live parser, so the real subcommands appear.
+    assert "runs" in out and "show" in out and "run" in out
+
+
+def test_completion_fish_emits_per_subcommand_lines(capsys):
+    exit_code = main(["completion", "fish"])
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "complete -c sylvae -f" in out
+    assert "complete -c sylvae -n __fish_use_subcommand -a runs" in out
+
+
+def test_runs_output_is_plain_by_default_but_colored_under_force_color(tmp_path, capsys, monkeypatch):
+    _seed_runs(tmp_path)
+
+    # Default (capsys is not a tty): no ANSI escapes, so pipes/CI stay clean.
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    main(["runs", "--runs-dir", str(tmp_path)])
+    assert "\033[" not in capsys.readouterr().out
+
+    # FORCE_COLOR paints the failed status red even without a tty.
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    main(["runs", "--runs-dir", str(tmp_path)])
+    assert "\033[31m" in capsys.readouterr().out  # red, from the "failed" run

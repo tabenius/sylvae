@@ -168,6 +168,27 @@ by the recorded input, output, and error sections; `--json` emits the stored
 record verbatim plus its `runtime_ref`. An unknown id, or an ambiguous prefix,
 is refused rather than guessed.
 
+Output is colored (run status, table header, `show` sections) only when writing
+to a terminal. It is plain when piped or redirected, when `NO_COLOR` is set, or
+under `TERM=dumb`, so `--json` and scraped output stay byte-clean; `FORCE_COLOR`
+forces it on.
+
+## Shell completion
+
+`sylvae completion <shell>` prints a completion script for the top-level
+subcommands. Set it up once:
+
+    # bash — add to ~/.bashrc:
+    eval "$(sylvae completion bash)"
+    # …or install system-wide:
+    sylvae completion bash | sudo tee /etc/bash_completion.d/sylvae
+
+    # fish:
+    sylvae completion fish > ~/.config/fish/completions/sylvae.fish
+
+The script is derived from the live command list, so it stays in sync as
+subcommands are added.
+
 ## Use from an agent (MCP)
 
 Sylvae can expose itself as an MCP server, so an agent can delegate work to
