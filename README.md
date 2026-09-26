@@ -157,6 +157,17 @@ machine-readable array (including `run_id`, `runtime_ref`, `model`, and
 `runs/`; `--skill`, `--backend`, and `--status` filter, and `--limit` caps the
 count (0 for all).
 
+To inspect one run in full — its input, output, and any error — pass its id (or
+an unambiguous prefix) to `show`:
+
+    sylvae show 9f2c1a
+    sylvae show 9f2c1a3b4c5d6e7f8091a2b3c4d5e6f7 --json
+
+The default view prints the run's metadata (including its `runtime_ref`) followed
+by the recorded input, output, and error sections; `--json` emits the stored
+record verbatim plus its `runtime_ref`. An unknown id, or an ambiguous prefix,
+is refused rather than guessed.
+
 ## Use from an agent (MCP)
 
 Sylvae can expose itself as an MCP server, so an agent can delegate work to
