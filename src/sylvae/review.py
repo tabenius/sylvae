@@ -10,6 +10,7 @@ from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from sylvae.evidence import runtime_ref_for
 from sylvae.loader import Skill, SkillLoadError, load_skill, resolve_skill_dir
 from sylvae.runner import BACKENDS, run_skill
 
@@ -95,6 +96,15 @@ def _run_block(record: dict) -> str:
     color = _STATUS_COLORS.get(status, "#666")
 
     detail_parts = []
+    run_id = record.get("run_id", "")
+    if run_id:
+        # The run's cross-system identity — the same sylvae:run/<id> a
+        # coordinator records as evidence elsewhere. Surfacing it here lets a
+        # reviewer copy the join key without dropping to the CLI.
+        ref = html.escape(runtime_ref_for(run_id))
+        detail_parts.append(
+            f'<div class="field"><strong>runtime ref</strong><pre>{ref}</pre></div>'
+        )
     if record.get("input_summary"):
         detail_parts.append(f'<div class="field"><strong>input</strong><pre>{html.escape(record["input_summary"])}</pre></div>')
     if record.get("output"):

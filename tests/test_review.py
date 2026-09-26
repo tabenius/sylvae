@@ -87,6 +87,19 @@ def test_render_html_shows_error_when_present():
     assert "model not found" in html
 
 
+def test_render_html_surfaces_runtime_ref_when_run_id_present():
+    html = render_html([make_record(run_id="a" * 32)])
+
+    assert "runtime ref" in html
+    assert "sylvae:run/" + "a" * 32 in html
+
+
+def test_render_html_omits_runtime_ref_without_run_id():
+    html = render_html([make_record()])  # make_record has no run_id
+
+    assert "runtime ref" not in html
+
+
 def test_server_serves_rendered_page_on_loopback_only(tmp_path):
     _write_jsonl(tmp_path / "runs.jsonl", [make_record(skill="live-test-skill")])
 
