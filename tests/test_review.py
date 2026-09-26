@@ -5,6 +5,8 @@ import urllib.parse
 import urllib.request
 from unittest.mock import patch
 
+import pytest
+
 from sylvae.evidence import EvidenceRecord
 from sylvae.review import list_skills, load_all_runs, render_html, start_server
 
@@ -330,3 +332,106 @@ def test_post_run_allows_matching_same_origin_request(mock_run_skill, tmp_path):
 
     assert status == 200
     mock_run_skill.assert_called_once()
+
+
+# ── hardening: Host allowlist, token, headers, fail-closed bind ──────────────
+
+def _raw_request(port, method="GET", path="/", headers=None, body=b""):
+    """Send one HTTP request with exactly the given headers (urllib would
+    rewrite Host), and return (status, headers, body)."""
+    import http.client
+
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    conn.putrequest(method, path, skip_host=True, skip_accept_encoding=True)
+    for name, value in (headers or {}).items():
+        conn.putheader(name, value)
+    if body:
+        conn.putheader("Content-Length", str(len(body)))
+    conn.endheaders(body or None)
+    resp = conn.getresponse()
+    data = resp.read().decode("utf-8", "replace")
+    conn.close()
+    return resp.status, dict(resp.getheaders()), data
+
+
+@patch("sylvae.review.run_skill")
+def test_dns_rebinding_host_is_refused_for_reads_and_runs(mock_run_skill, tmp_path):
+    """A rebinding page reaches 127.0.0.1 under its own hostname, and its
+    Origin matches its Host, so the Origin check alone would let it in."""
+    (tmp_path / "runs").mkdir()
+    _make_skill_fixture(tmp_path / "skills", "summarize-diff")
+    server, port = _running_server(tmp_path)
+    evil = f"rebind.evil.example:{port}"
+    form = urllib.parse.urlencode({"skill": "summarize-diff", "backend": "ollama", "model": "", "input_text": "hi"}).encode()
+    try:
+        get_status, _, _ = _raw_request(port, headers={"Host": evil})
+        post_status, _, _ = _raw_request(
+            port, "POST", "/run", body=form,
+            headers={"Host": evil, "Origin": f"http://{evil}", "Content-Type": "application/x-www-form-urlencoded"},
+        )
+        ok_status, headers, _ = _raw_request(port, headers={"Host": f"127.0.0.1:{port}"})
+        localhost_status, _, _ = _raw_request(port, headers={"Host": f"localhost:{port}"})
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert get_status == 403
+    assert post_status == 403
+    mock_run_skill.assert_not_called()
+    assert ok_status == 200 and localhost_status == 200
+    assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
+    assert headers["X-Frame-Options"] == "DENY"
+    assert headers["X-Content-Type-Options"] == "nosniff"
+    assert headers["Cache-Control"] == "no-store"
+
+
+@patch("sylvae.review.run_skill")
+def test_token_is_required_on_every_request_when_configured(mock_run_skill, tmp_path):
+    (tmp_path / "runs").mkdir()
+    _make_skill_fixture(tmp_path / "skills", "summarize-diff")
+    mock_run_skill.return_value = EvidenceRecord(
+        run_id="c" * 32, skill="summarize-diff", backend="ollama", model="ollama/mistral:latest",
+        input_summary="hi", output="ok", duration_ms=1, status="ok", timestamp="2026-09-26T10:00:00Z", error=None,
+    )
+    server, port = _running_server(tmp_path, token="s3cret-token")
+    form = urllib.parse.urlencode({"skill": "summarize-diff", "backend": "ollama", "model": "", "input_text": "hi"}).encode()
+    host = {"Host": f"127.0.0.1:{port}"}
+    ctype = {"Content-Type": "application/x-www-form-urlencoded"}
+    try:
+        no_token, no_token_headers, _ = _raw_request(port, headers=host)
+        wrong, _, _ = _raw_request(port, headers={**host, "Authorization": "Bearer nope"})
+        run_without, _, _ = _raw_request(port, "POST", "/run", body=form, headers={**host, **ctype})
+        ok, _, _ = _raw_request(port, headers={**host, "Authorization": "Bearer s3cret-token"})
+        # With a token the Host header is not what protects the server.
+        lan, _, _ = _raw_request(port, headers={"Host": "reviewer.lan:8971", "Authorization": "Bearer s3cret-token"})
+        run_with, _, _ = _raw_request(port, "POST", "/run", body=form,
+                                      headers={**host, **ctype, "Authorization": "Bearer s3cret-token"})
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert no_token == 401 and no_token_headers["WWW-Authenticate"] == "Bearer"
+    assert wrong == 401 and run_without == 401
+    assert ok == 200 and lan == 200 and run_with == 200
+    mock_run_skill.assert_called_once()
+
+
+def test_binding_beyond_loopback_requires_a_token(tmp_path):
+    from sylvae.review import ReviewConfigError
+
+    with pytest.raises(ReviewConfigError):
+        start_server(runs_dir=tmp_path, skills_dir=tmp_path, host="0.0.0.0", port=0)
+    server = start_server(runs_dir=tmp_path, skills_dir=tmp_path, host="0.0.0.0", port=0, token="t0ken")
+    server.server_close()
+
+
+def test_cli_reports_an_unsafe_bind_instead_of_a_traceback(tmp_path, monkeypatch, capsys):
+    from sylvae.cli import main
+
+    monkeypatch.delenv("SYLVAE_REVIEW_TOKEN", raising=False)
+    assert main(["review", "--host", "0.0.0.0", "--port", "0", "--runs-dir", str(tmp_path)]) == 2
+    assert "SYLVAE_REVIEW_TOKEN" in capsys.readouterr().err
+
+
+def test_handler_times_out_stalled_clients():
+    from sylvae.review import REQUEST_TIMEOUT_SECONDS, _ReviewHandler
+
+    assert _ReviewHandler.timeout == REQUEST_TIMEOUT_SECONDS == 30

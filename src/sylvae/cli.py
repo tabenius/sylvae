@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from sylvae.loader import SkillLoadError
-from sylvae.review import serve
+from sylvae.review import ReviewConfigError, serve
 from sylvae.runner import BACKENDS, run_skill
 
 
@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     review_parser = subparsers.add_parser("review", help="Browse the evidence log in a local web page")
     review_parser.add_argument("--runs-dir", default="runs")
     review_parser.add_argument("--skills-dir", default="skills")
-    review_parser.add_argument("--host", default="127.0.0.1", help="Loopback by default — pass 0.0.0.0 to allow LAN access")
+    review_parser.add_argument("--host", default="127.0.0.1", help="Loopback by default. Binding beyond loopback (e.g. 0.0.0.0 for LAN access) requires SYLVAE_REVIEW_TOKEN; every request must then send it as a Bearer token.")
     review_parser.add_argument("--port", type=int, default=8971)
 
     args = parser.parse_args(argv)
@@ -95,7 +95,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "review":
-        serve(runs_dir=args.runs_dir, skills_dir=args.skills_dir, host=args.host, port=args.port)
+        try:
+            serve(runs_dir=args.runs_dir, skills_dir=args.skills_dir, host=args.host, port=args.port)
+        except ReviewConfigError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
         return 0
 
     return 1

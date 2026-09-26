@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hmac
 import html
+import ipaddress
 import json
+import os
 import urllib.parse
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,6 +18,38 @@ from sylvae.runner import BACKENDS, run_skill
 # port. Generous next to a real skill input (a few KB of diff), small next
 # to anything that would hurt.
 MAX_REQUEST_BYTES = 1_000_000
+
+# A client that stops sending is dropped instead of holding a thread forever.
+REQUEST_TIMEOUT_SECONDS = 30
+
+# The pages are self-contained: inline style and the one inline filter script,
+# no other origin, no framing (the run form triggers costly backend calls).
+_SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+        "form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+    ),
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-store",
+}
+
+_LOOPBACK_NAMES = ("localhost", "127.0.0.1", "[::1]")
+
+
+class ReviewConfigError(ValueError):
+    """The review server was asked to start in an unsafe configuration."""
+
+
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        return False
+
 
 _STATUS_COLORS = {"ok": "#2e7d46", "failed": "#b3261e", "unavailable": "#9a6300"}
 
@@ -230,21 +265,53 @@ def render_error(message: str) -> str:
 class _ReviewHandler(BaseHTTPRequestHandler):
     runs_dir: Path = Path("runs")
     skills_dir: Path = Path("skills")
+    token: str | None = None
+    timeout = REQUEST_TIMEOUT_SECONDS
 
-    def _write_html(self, page: str, status: int = 200) -> None:
+    def _write_html(self, page: str, status: int = 200, headers: dict[str, str] | None = None) -> None:
         body = page.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        for name, value in {**_SECURITY_HEADERS, **(headers or {})}.items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 
+    def _refused(self) -> bool:
+        """Refuse a request that is not for us; True if a response was sent.
+
+        With a token, every request must carry it: a browser never adds an
+        Authorization header on its own, so neither a cross-site page nor a
+        DNS-rebinding one can use the server. Without a token the server is
+        loopback-only, and the Host header must name loopback too: a
+        rebinding page reaches 127.0.0.1 under its own hostname, which the
+        Origin check alone (it compares Origin with Host) cannot tell apart.
+        """
+        if self.token is not None:
+            supplied = self.headers.get("Authorization", "")
+            if not hmac.compare_digest(supplied.encode(), f"Bearer {self.token}".encode()):
+                self._write_html(render_error("authentication required"), status=401,
+                                 headers={"WWW-Authenticate": "Bearer"})
+                return True
+            return False
+        port = self.server.server_address[1]
+        allowed = {name for name in _LOOPBACK_NAMES} | {f"{name}:{port}" for name in _LOOPBACK_NAMES}
+        if self.headers.get("Host", "").strip().lower() not in allowed:
+            self._write_html(render_error("unexpected Host header"), status=403)
+            return True
+        return False
+
     def do_GET(self) -> None:  # noqa: N802 (stdlib method name)
+        if self._refused():
+            return
         records = load_all_runs(self.runs_dir)
         skills = list_skills(self.skills_dir)
         self._write_html(render_html(records, skills=skills))
 
     def do_POST(self) -> None:  # noqa: N802 (stdlib method name)
+        if self._refused():
+            return
         if self.path != "/run":
             self._write_html(render_error(f"no such route: {self.path}"), status=404)
             return
@@ -326,15 +393,24 @@ def start_server(
     skills_dir: str | Path = "skills",
     host: str = "127.0.0.1",
     port: int = 8971,
+    token: str | None = None,
 ) -> ThreadingHTTPServer:
     """Create (but do not run) a loopback-only HTTP server. Threading so a
     long-running triggered skill run (real backends take seconds to
     minutes) doesn't block the evidence list for anyone else looking at
     it concurrently. Caller drives it — serve_forever() blocks, so tests
-    and the CLI each own that."""
+    and the CLI each own that.
+
+    Anything that can reach the port can trigger runs, so binding beyond
+    loopback requires a token (fail closed)."""
+    token = token or None
+    if not _is_loopback(host) and token is None:
+        raise ReviewConfigError(
+            f"refusing to serve on {host} without a token: set SYLVAE_REVIEW_TOKEN"
+        )
     handler = type(
         "_BoundReviewHandler", (_ReviewHandler,),
-        {"runs_dir": Path(runs_dir), "skills_dir": Path(skills_dir)},
+        {"runs_dir": Path(runs_dir), "skills_dir": Path(skills_dir), "token": token},
     )
     return ThreadingHTTPServer((host, port), handler)
 
@@ -345,8 +421,12 @@ def serve(
     host: str = "127.0.0.1",
     port: int = 8971,
 ) -> None:
-    server = start_server(runs_dir=runs_dir, skills_dir=skills_dir, host=host, port=port)
-    print(f"Sylvae evidence review at http://{host}:{port}/ (Ctrl+C to stop)")
+    # The token comes from the environment, never argv (argv is world-readable
+    # in /proc).
+    token = os.environ.get("SYLVAE_REVIEW_TOKEN") or None
+    server = start_server(runs_dir=runs_dir, skills_dir=skills_dir, host=host, port=port, token=token)
+    auth = " (token required)" if token else ""
+    print(f"Sylvae evidence review at http://{host}:{port}/{auth} (Ctrl+C to stop)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
