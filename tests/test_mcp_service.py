@@ -161,6 +161,28 @@ def test_run_skill_reports_backend_model_and_duration(mock_run, tmp_path):
     assert out["duration_ms"] == 12
 
 
+@patch("sylvae.mcp.service.run_skill")
+def test_run_skill_reports_runtime_identity(mock_run, tmp_path):
+    _make_skill(tmp_path / "skills", "s")
+    mock_run.return_value = _record(run_id="12345678123442348234123456789abc")
+
+    out = _service(tmp_path).run_skill(skill="s", input="hi")
+
+    assert out["run_id"] == "12345678123442348234123456789abc"
+    assert out["runtime_ref"] == "sylvae:run/12345678123442348234123456789abc"
+
+
+@patch("sylvae.mcp.service.run_skill")
+def test_run_skill_forwards_preallocated_runtime_identity(mock_run, tmp_path):
+    _make_skill(tmp_path / "skills", "s")
+    run_id = "12345678123442348234123456789abc"
+    mock_run.return_value = _record(run_id=run_id)
+
+    _service(tmp_path).run_skill(skill="s", input="hi", run_id=run_id)
+
+    assert mock_run.call_args.kwargs["run_id"] == run_id
+
+
 @patch("sylvae.mcp.service.run_skill", side_effect=RuntimeError("something exploded"))
 def test_unexpected_exception_becomes_a_structured_error_not_a_traceback(mock_run, tmp_path):
     _make_skill(tmp_path / "skills", "s")

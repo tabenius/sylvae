@@ -84,6 +84,7 @@ class McpToolService:
         input: str,
         backend: str | None = None,
         model: str | None = None,
+        run_id: str | None = None,
     ) -> dict[str, Any]:
         if len(input) > MAX_INPUT_CHARS:
             return self._error(
@@ -126,6 +127,7 @@ class McpToolService:
             record = run_skill(
                 str(skill_path), chosen, input,
                 runs_dir=str(self.runs_dir), model=model, timeout=self.timeout,
+                run_id=run_id,
             )
         except Exception as exc:  # never surface a traceback through a tool call
             return self._error(f"run failed: {type(exc).__name__}: {exc}")
@@ -135,6 +137,8 @@ class McpToolService:
         # caller needs to tell those apart to decide what to do next.
         return {
             "ok": True,
+            "run_id": record.run_id,
+            "runtime_ref": record.runtime_ref,
             "skill": record.skill,
             "backend": record.backend,
             "model": record.model,

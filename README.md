@@ -101,6 +101,25 @@ budget — every run spends the same five-hour allowance you use to work.
 Hitting that limit is reported as `unavailable`, not `failed`: the run
 never happened, it didn't happen badly.
 
+## Correlate a run with WeftMark
+
+A coordinator can preallocate Sylvae's run id and use the same namespaced
+identity as WeftMark's evidence producer. This keeps the join explicit and
+lets WeftMark execute and classify the real Sylvae command rather than
+importing or guessing a result:
+
+    RUN_ID=$(python -c 'import uuid; print(uuid.uuid4().hex)')
+    weftmark --repo /path/to/worktree \
+      --producer-id "sylvae:run/$RUN_ID" --producer-kind worker \
+      evidence run CHANGE_SET_ID --kind test --command \
+      sylvae run /path/to/skill --backend auto --input /path/to/input \
+      --run-id "$RUN_ID"
+
+`--run-id` accepts only Sylvae's canonical 32-character lowercase UUID hex
+form. Omitting it preserves the normal behavior: Sylvae allocates the id at
+run time. The local JSONL record remains the run record; WeftMark records the
+commit-bound command evidence and its producer identity.
+
 ## Review
 
 Browse the evidence log in a local, loopback-only web page — filter by
@@ -127,7 +146,10 @@ a cheaper model mid-task instead of doing it inline:
         --skills-dir /path/to/skills --runs-dir /path/to/runs
 
 Two tools: `sylvae_list_skills` and `sylvae_run_skill`. Runs still land in
-the evidence log exactly as CLI runs do.
+the evidence log exactly as CLI runs do. The run result includes `run_id` and
+its namespaced `runtime_ref`. A coordinator may also supply the optional
+canonical `run_id` before execution, allowing an MCP-triggered run and external
+WeftMark evidence to share the same `sylvae:run/<id>` identity.
 
 **Two guards, on by default.** Runs default to the cheap local backend — an
 agent calling Sylvae and landing on something as expensive as itself has

@@ -132,3 +132,14 @@ def test_readers_tolerate_historical_records_without_a_run_id(tmp_path):
 
     assert len(records) == 1
     assert records[0].get("run_id") is None
+
+
+def test_runtime_ref_is_namespaced_and_not_serialised(tmp_path):
+    record = make_record()
+    # The run's cross-system identity uses the stable sylvae:run/ scheme.
+    assert record.runtime_ref == f"sylvae:run/{record.run_id}"
+    # Derived identity must never enter the on-disk evidence log.
+    written = append_evidence(record, runs_dir=tmp_path / "runs")
+    loaded = json.loads(written.read_text().strip().splitlines()[0])
+    assert "runtime_ref" not in loaded
+    assert loaded["run_id"] == record.run_id

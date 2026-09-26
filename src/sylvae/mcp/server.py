@@ -95,6 +95,7 @@ def build_server(service: McpToolService):
         input: str,
         backend: str | None = None,
         model: str | None = None,
+        run_id: str | None = None,
     ) -> dict[str, Any]:
         """Run one skill against the given input text on a cheaper model.
 
@@ -102,8 +103,12 @@ def build_server(service: McpToolService):
         backend: optional; defaults to a cheap local model. Some backends are
         refused here to prevent recursion and runaway cost.
         model: optional model override for the chosen backend.
+        run_id: optional preallocated UUID hex identity for correlation with
+        an external evidence ledger such as WeftMark.
         """
-        return service.run_skill(skill=skill, input=input, backend=backend, model=model)
+        return service.run_skill(
+            skill=skill, input=input, backend=backend, model=model, run_id=run_id
+        )
 
     return server
 
