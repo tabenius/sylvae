@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from sylvae.evidence import EvidenceRecord
+from sylvae.evidence import EvidenceRecord, append_evidence
 from sylvae.cli import main
 
 
@@ -140,3 +140,77 @@ def test_main_review_forwards_custom_flags(mock_serve):
     mock_serve.assert_called_once_with(
         runs_dir="/tmp/other-runs", skills_dir="/tmp/other-skills", host="0.0.0.0", port=9999,
     )
+
+
+def _seed_runs(runs_dir: Path) -> None:
+    # Two runs on distinct days so most-recent-first ordering is observable.
+    append_evidence(
+        EvidenceRecord(
+            run_id="a" * 32, skill="summarize-diff", backend="ollama",
+            model="ollama/mistral", input_summary="x", output="o", duration_ms=5,
+            status="ok", timestamp="2026-08-23T10:00:00+00:00",
+        ),
+        runs_dir=runs_dir,
+    )
+    append_evidence(
+        EvidenceRecord(
+            run_id="b" * 32, skill="disk-report", backend="anthropic",
+            model="claude-sonnet-5", input_summary="y", output="", duration_ms=9,
+            status="failed", timestamp="2026-08-24T11:00:00+00:00", error="boom",
+        ),
+        runs_dir=runs_dir,
+    )
+
+
+def test_runs_json_lists_records_with_runtime_ref_most_recent_first(tmp_path, capsys):
+    _seed_runs(tmp_path)
+
+    exit_code = main(["runs", "--runs-dir", str(tmp_path), "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [r["run_id"] for r in payload] == ["b" * 32, "a" * 32]  # most recent first
+    # The derived runtime_ref is surfaced even though it never enters the log.
+    assert payload[0]["runtime_ref"] == "sylvae:run/" + "b" * 32
+    assert payload[1]["runtime_ref"] == "sylvae:run/" + "a" * 32
+
+
+def test_runs_table_shows_header_and_runtime_ref(tmp_path, capsys):
+    _seed_runs(tmp_path)
+
+    exit_code = main(["runs", "--runs-dir", str(tmp_path)])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "RUNTIME_REF" in out
+    assert "sylvae:run/" + "a" * 32 in out
+    assert "summarize-diff" in out and "disk-report" in out
+
+
+def test_runs_filters_and_limit(tmp_path, capsys):
+    _seed_runs(tmp_path)
+
+    # Filter by status.
+    main(["runs", "--runs-dir", str(tmp_path), "--status", "failed", "--json"])
+    failed = json.loads(capsys.readouterr().out)
+    assert [r["run_id"] for r in failed] == ["b" * 32]
+
+    # Filter by backend.
+    main(["runs", "--runs-dir", str(tmp_path), "--backend", "ollama", "--json"])
+    ollama = json.loads(capsys.readouterr().out)
+    assert [r["skill"] for r in ollama] == ["summarize-diff"]
+
+    # Limit caps the (most-recent-first) list.
+    main(["runs", "--runs-dir", str(tmp_path), "--limit", "1", "--json"])
+    limited = json.loads(capsys.readouterr().out)
+    assert [r["run_id"] for r in limited] == ["b" * 32]
+
+
+def test_runs_empty_log_is_not_an_error(tmp_path, capsys):
+    exit_code = main(["runs", "--runs-dir", str(tmp_path / "nope"), "--json"])
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == []
+
+    exit_code = main(["runs", "--runs-dir", str(tmp_path / "nope")])
+    assert exit_code == 0
+    assert "No runs recorded." in capsys.readouterr().err

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
+from sylvae.evidence import runtime_ref_for
 from sylvae.loader import SkillLoadError
-from sylvae.review import ReviewConfigError, serve
+from sylvae.review import ReviewConfigError, load_all_runs, serve
 from sylvae.runner import BACKENDS, run_skill
 
 
@@ -64,6 +66,27 @@ def main(argv: list[str] | None = None) -> int:
     review_parser.add_argument("--host", default="127.0.0.1", help="Loopback by default. Binding beyond loopback (e.g. 0.0.0.0 for LAN access) requires SYLVAE_REVIEW_TOKEN; every request must then send it as a Bearer token.")
     review_parser.add_argument("--port", type=int, default=8971)
 
+    runs_parser = subparsers.add_parser(
+        "runs", help="List recorded runs from the evidence log (most recent first)"
+    )
+    runs_parser.add_argument("--runs-dir", default="runs")
+    runs_parser.add_argument("--skill", default=None, help="Only runs of this skill")
+    runs_parser.add_argument("--backend", default=None, help="Only runs on this backend")
+    runs_parser.add_argument(
+        "--status", default=None, help="Only runs with this status (ok | failed | unavailable)"
+    )
+    runs_parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Show at most this many (most recent first); 0 for all. Default 20.",
+    )
+    runs_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a JSON array (includes each run's runtime_ref) instead of a table.",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "run":
@@ -114,6 +137,63 @@ def main(argv: list[str] | None = None) -> int:
         except ReviewConfigError as exc:
             print(str(exc), file=sys.stderr)
             return 2
+        return 0
+
+    if args.command == "runs":
+        records = load_all_runs(args.runs_dir)  # most recent first
+        if args.skill is not None:
+            records = [r for r in records if r.get("skill") == args.skill]
+        if args.backend is not None:
+            records = [r for r in records if r.get("backend") == args.backend]
+        if args.status is not None:
+            records = [r for r in records if r.get("status") == args.status]
+        if args.limit and args.limit > 0:
+            records = records[: args.limit]
+
+        def _ref(record: dict) -> str:
+            run_id = record.get("run_id") or ""
+            return runtime_ref_for(run_id) if run_id else ""
+
+        if args.json:
+            # A stable projection: the fields a coordinator/operator correlates
+            # on, plus the derived runtime_ref that never lands in the log.
+            projection = [
+                {
+                    "run_id": r.get("run_id", ""),
+                    "runtime_ref": _ref(r),
+                    "skill": r.get("skill", ""),
+                    "backend": r.get("backend", ""),
+                    "model": r.get("model", ""),
+                    "status": r.get("status", ""),
+                    "duration_ms": r.get("duration_ms"),
+                    "timestamp": r.get("timestamp", ""),
+                }
+                for r in records
+            ]
+            print(json.dumps(projection, indent=2))
+            return 0
+
+        if not records:
+            print("No runs recorded.", file=sys.stderr)
+            return 0
+
+        headers = ("TIMESTAMP", "STATUS", "SKILL", "BACKEND", "RUNTIME_REF")
+        rows = [
+            (
+                r.get("timestamp", ""),
+                r.get("status", ""),
+                r.get("skill", ""),
+                r.get("backend", ""),
+                _ref(r),
+            )
+            for r in records
+        ]
+        widths = [
+            max(len(headers[i]), *(len(row[i]) for row in rows))
+            for i in range(len(headers))
+        ]
+        for cols in (headers, *rows):
+            print("  ".join(cols[i].ljust(widths[i]) for i in range(len(headers))))
         return 0
 
     return 1

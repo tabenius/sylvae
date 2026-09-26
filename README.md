@@ -140,6 +140,23 @@ Triggered runs use real backends — a run through `shellout`/`opencode` can
 take a while and costs the same as running it from the CLI; there's no
 "cheap preview" mode.
 
+## List runs
+
+For a terminal view of the evidence log — no web server — list recorded runs,
+most recent first:
+
+    sylvae runs
+    sylvae runs --skill summarize-diff --status ok --limit 10
+    sylvae runs --json
+
+The table shows each run's timestamp, status, skill, backend, and
+`runtime_ref` — the run's `sylvae:run/<id>` cross-system identity, the same
+string a coordinator uses to record it as evidence elsewhere. `--json` emits a
+machine-readable array (including `run_id`, `runtime_ref`, `model`, and
+`duration_ms`) for scripting or correlation. `--runs-dir` overrides the default
+`runs/`; `--skill`, `--backend`, and `--status` filter, and `--limit` caps the
+count (0 for all).
+
 ## Use from an agent (MCP)
 
 Sylvae can expose itself as an MCP server, so an agent can delegate work to
