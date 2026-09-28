@@ -74,8 +74,12 @@ def test_main_end_to_end_via_shellout(mock_subprocess_run, tmp_path, monkeypatch
     exit_code = main(["run", str(skill_path), "--backend", "shellout", "--input", "some text"])
 
     assert exit_code == 1
-    runs_files = list((tmp_path / "runs").glob("*.jsonl"))
+    runs_files = [
+        path for path in (tmp_path / "runs").glob("*.jsonl")
+        if path.name != "nostoi.jsonl"
+    ]
     assert len(runs_files) == 1
+    assert (tmp_path / "runs" / "nostoi.jsonl").exists()
     record = json.loads(runs_files[0].read_text().strip())
     assert record["status"] == "unavailable"
     assert record["skill"] == "summarize-diff"

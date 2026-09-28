@@ -1,10 +1,19 @@
+import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from sylvae.backends.base import BackendResult
-from sylvae.runner import BACKENDS, build_prompt, resolve_backend, resolve_input, run_skill
+from sylvae.runner import (
+    BACKENDS,
+    RunRateLimited,
+    _nostoi,
+    build_prompt,
+    resolve_backend,
+    resolve_input,
+    run_skill,
+)
 from sylvae.loader import Skill
 
 SKILL_PATH = Path(__file__).parent.parent / "skills" / "summarize-diff"
@@ -37,12 +46,24 @@ def test_run_skill_writes_evidence_and_returns_record(tmp_path, monkeypatch):
     )
     monkeypatch.setitem(BACKENDS, "fake", MagicMock(return_value=fake_backend))
 
-    record = run_skill(SKILL_PATH, "fake", "some input text", runs_dir=tmp_path)
+    record = run_skill(
+        SKILL_PATH, "fake", "some input text", runs_dir=tmp_path,
+        run_id="12345678123442348234123456789abc",
+    )
 
     assert record.status == "ok"
     assert record.output == "a summary"
     assert record.skill == "summarize-diff"
     assert (tmp_path / f"{record.timestamp[:10]}.jsonl").exists()
+    report = _nostoi().verify(tmp_path / "nostoi.jsonl")
+    assert report["ok"] is True
+    assert report["verified"] == 2
+    records = [json.loads(line) for line in (tmp_path / "nostoi.jsonl").read_text().splitlines()]
+    assert records[0]["kind"] == "skill.run.requested"
+    assert records[0]["body"]["input"] == "some input text"
+    assert records[1]["kind"] == "skill.run.completed"
+    assert records[1]["body"]["intent_digest"] == records[0]["digest"]
+    fake_backend.run.assert_called_once()
 
 
 def test_run_skill_uses_valid_preallocated_run_id(tmp_path, monkeypatch):
@@ -116,6 +137,57 @@ def test_run_skill_threads_backend_error_into_evidence_record(tmp_path, monkeypa
 
     assert record.status == "unavailable"
     assert record.error == "model 'x' not found on Ollama server — run `ollama pull x`"
+
+
+def test_provider_exception_leaves_a_linked_failure_in_nostoi(tmp_path, monkeypatch):
+    fake_backend = MagicMock()
+    fake_backend.run.side_effect = RuntimeError("provider failed")
+    monkeypatch.setitem(BACKENDS, "fake", MagicMock(return_value=fake_backend))
+
+    with pytest.raises(RuntimeError, match="provider failed"):
+        run_skill(
+            SKILL_PATH, "fake", "private prompt", runs_dir=tmp_path,
+            run_id="12345678123442348234123456789abc",
+        )
+
+    records = [json.loads(line) for line in (tmp_path / "nostoi.jsonl").read_text().splitlines()]
+    assert [record["kind"] for record in records] == [
+        "skill.run.requested", "skill.run.failed"
+    ]
+    assert records[0]["body"]["input"] == "private prompt"
+    assert records[1]["body"]["intent_digest"] == records[0]["digest"]
+    assert records[1]["body"]["error_type"] == "RuntimeError"
+
+
+def test_run_budget_records_only_one_limited_event(tmp_path, monkeypatch):
+    import sylvae.runner as runner
+
+    fake_backend = MagicMock()
+    fake_backend.run.return_value = BackendResult(
+        output="ok", model="fake", duration_ms=1, status="ok"
+    )
+    monkeypatch.setitem(BACKENDS, "fake", MagicMock(return_value=fake_backend))
+    monkeypatch.setattr(runner, "MAX_RUNS_PER_MINUTE", 1)
+    monkeypatch.setattr(runner, "_run_admissions", [])
+    monkeypatch.setattr(runner, "_run_limit_recorded_minute", None)
+
+    run_skill(SKILL_PATH, "fake", "one", runs_dir=tmp_path)
+    for _ in range(2):
+        with pytest.raises(RunRateLimited):
+            run_skill(SKILL_PATH, "fake", "flood", runs_dir=tmp_path)
+
+    records = [json.loads(line) for line in (tmp_path / "nostoi.jsonl").read_text().splitlines()]
+    assert [record["kind"] for record in records].count("skill.run.rate_limited") == 1
+    assert fake_backend.run.call_count == 1
+
+
+def test_run_input_is_bounded(tmp_path):
+    with pytest.raises(ValueError, match="100000-character run limit"):
+        resolve_input("x" * 100_001)
+    source = tmp_path / "large.txt"
+    source.write_text("x" * 100_001)
+    with pytest.raises(ValueError, match="100000-character run limit"):
+        resolve_input(str(source))
 
 
 def test_resolve_backend_passes_through_explicit_choice():

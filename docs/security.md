@@ -85,6 +85,14 @@ MCP input is separately capped at `MAX_INPUT_CHARS` (100k). An unbounded
 prompt is unbounded cost, and that surface is driven by a model passing
 text that may itself have come from somewhere untrusted.
 
+### Audit-first provider calls
+
+Before a backend starts, Sylvae appends the full, bounded input and run
+identity to a `nostoi-v1` chain. The chain is sensitive because the input may
+contain personal or proprietary text; protect its directory accordingly. A
+compact completion or failure links back to the intent. See
+[`audit-first.md`](audit-first.md) for configuration and rate limits.
+
 ## Tested and NOT vulnerable
 
 Recorded so nobody spends time "fixing" it: **YAML alias-expansion bombs
