@@ -3,12 +3,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import shutil
+import subprocess
 
 from sylvae.color import color_enabled, paint, status_styles
 from sylvae.evidence import runtime_ref_for
 from sylvae.loader import SkillLoadError
 from sylvae.review import ReviewConfigError, load_all_runs, serve
 from sylvae.runner import BACKENDS, run_skill
+from sylvae.runtime_status import load_runtime_status, workflow_commands
 
 
 def _completion_script(shell: str, commands: list[str]) -> str:
@@ -45,6 +48,23 @@ def _completion_script(shell: str, commands: list[str]) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="sylvae")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    system_parser = subparsers.add_parser("system", help="Optional runtime, URLs, HITL and signing workflow")
+    system_parser.add_argument("--snapshot")
+    system_parser.add_argument("--runs-dir", default="runs")
+    system_parser.add_argument("--json", action="store_true")
+    audit_parser = subparsers.add_parser("audit", help="Verify or deliberately attest Sylvae's Nostoi audit chain")
+    audit_parser.add_argument("--runs-dir", default="runs")
+    audit_parser.add_argument("--json", action="store_true")
+    audit_commands = audit_parser.add_subparsers(dest="audit_command", required=True)
+    audit_commands.add_parser("verify")
+    attest_parser = audit_commands.add_parser("attest", help="Human signing step; inherits your terminal")
+    attest_parser.add_argument("--principal", required=True)
+    attest_parser.add_argument("--key", default="~/.ssh/id_ed25519")
+    check_parser = audit_commands.add_parser("verify-attestation")
+    check_parser.add_argument("--principal", required=True)
+    check_parser.add_argument("--allowed-signers", required=True)
+    check_parser.add_argument("--fingerprint", required=True)
 
     run_parser = subparsers.add_parser("run")
     run_parser.add_argument("skill_path")
@@ -139,6 +159,37 @@ def main(argv: list[str] | None = None) -> int:
     completion_parser.add_argument("shell", choices=("bash", "fish"))
 
     args = parser.parse_args(argv)
+
+    if args.command == "audit":
+        binary = shutil.which("nostoi")
+        if not binary:
+            print("Nostoi CLI not installed; audit signing/verification unavailable.", file=sys.stderr)
+            return 1
+        chain = workflow_commands(args.runs_dir)["chain"]
+        command = [binary, args.audit_command, chain]
+        if args.audit_command == "verify":
+            command += ["--format", "nostoi-v1"]
+        elif args.audit_command == "attest":
+            command += ["--format", "nostoi-v1", "--principal", args.principal, "--key", args.key]
+        else:
+            command += ["--principal", args.principal, "--allowed-signers", args.allowed_signers,
+                        "--fingerprint", args.fingerprint]
+        if args.json:
+            command.append("--json")
+        try:
+            return subprocess.run(command, check=False).returncode
+        except OSError:
+            print("Nostoi command unavailable.", file=sys.stderr)
+            return 1
+
+    if args.command == "system":
+        payload = {"runtime": load_runtime_status(args.snapshot), "workflow": workflow_commands(args.runs_dir)}
+        if args.json:
+            print(json.dumps(payload, sort_keys=True))
+        else:
+            print("\n".join(payload["runtime"]["summary"]))
+            print(json.dumps(payload["workflow"], indent=2))
+        return 0
 
     if args.command == "completion":
         print(_completion_script(args.shell, sorted(subparsers.choices)), end="")

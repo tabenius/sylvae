@@ -1,0 +1,24 @@
+{
+  "schema": "ragbaz.health-contract.v1",
+  "component": "sylvae",
+  "methods": [
+    {
+      "id": "review-server-liveness",
+      "transport": "http",
+      "method": "GET",
+      "path": "/healthz",
+      "expected_status": 200,
+      "expected_json": {"ok": true, "service": "sylvae-review", "schema": "sylvae.health.v1"},
+      "authentication": "SYLVAE_REVIEW_TOKEN if configured; otherwise loopback Host protection; gateway auth when proxied",
+      "timeout_seconds": 2,
+      "meaning": "Review process answers without loading the log; no provider/model readiness or evidence success implied."
+    },
+    {
+      "id": "audit-integrity",
+      "transport": "argv",
+      "argv": ["sylvae", "audit", "--json", "--runs-dir", "RUNS", "verify"],
+      "requires": ["nostoi", "configured readable audit chain"],
+      "meaning": "Audit integrity, separate from successful skill execution and human attestation."
+    }
+  ]
+}

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from sylvae.loader import Skill, SkillLoadError, load_skill, resolve_skill_dir
 from sylvae.runner import BACKENDS, run_skill
+from sylvae.runtime_status import load_runtime_status, workflow_commands
 
 # A POST body is read into memory in one go, so an unvalidated
 # Content-Length is a memory-exhaustion lever for anyone who can reach the
@@ -63,11 +64,17 @@ def load_all_runs(runs_dir: str | Path) -> list[dict]:
         return []
 
     records = []
+    audit_chain = Path(os.environ.get("SYLVAE_NOSTOI_LEDGER", runs_path / "nostoi.jsonl")).expanduser().resolve()
     for jsonl_file in sorted(runs_path.glob("*.jsonl")):
+        if jsonl_file.resolve() == audit_chain:
+            continue
         for line in jsonl_file.read_text().splitlines():
             line = line.strip()
             if line:
-                records.append(json.loads(line))
+                record = json.loads(line)
+                if isinstance(record, dict) and record.get("v") == "nostoi-v1":
+                    continue
+                records.append(record)
 
     records.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
     return records
@@ -305,9 +312,31 @@ class _ReviewHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 (stdlib method name)
         if self._refused():
             return
+        path = urllib.parse.urlsplit(self.path).path
+        if path in ("/healthz", "/api/system"):
+            payload = ({"ok": True, "service": "sylvae-review", "schema": "sylvae.health.v1"}
+                       if path == "/healthz" else
+                       {"runtime": load_runtime_status(), "workflow": workflow_commands(self.runs_dir)})
+            body = json.dumps(payload, sort_keys=True).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            for key, value in _SECURITY_HEADERS.items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path != "/":
+            self._write_html(render_error("no such route"), status=404)
+            return
         records = load_all_runs(self.runs_dir)
         skills = list_skills(self.skills_dir)
-        self._write_html(render_html(records, skills=skills))
+        runtime = "\n".join(load_runtime_status()["summary"])
+        workflow = json.dumps(workflow_commands(self.runs_dir), indent=2)
+        page = render_html(records, skills=skills).replace(
+            "<body>", "<body><details><summary>Runtime, URLs and human attestation</summary><pre>"
+            + html.escape(runtime + "\n" + workflow) + "</pre></details>", 1)
+        self._write_html(page)
 
     def do_POST(self) -> None:  # noqa: N802 (stdlib method name)
         if self._refused():

@@ -69,6 +69,7 @@ def _nostoi():
     configured = os.environ.get("SYLVAE_NOSTOI_PYTHON")
     candidates = [Path(configured).expanduser()] if configured else []
     candidates.extend((
+        Path(__file__).with_name("nostoi_reference.py"),
         Path(__file__).resolve().parents[3] / "nostoi" / "contrib" / "python" / "nostoi.py",
         Path(os.environ.get("RAGBAZ_SRC_ROOT", Path(__file__).resolve().parents[3]))
         / "nostoi" / "contrib" / "python" / "nostoi.py",
