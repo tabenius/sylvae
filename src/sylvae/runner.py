@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import os
+import hashlib
+import importlib.util
+import threading
+import time
 import uuid
 
 from datetime import datetime, timezone
@@ -23,11 +27,86 @@ BACKENDS: dict[str, type[Backend]] = {
     "opencode": OpenCodeBackend,
 }
 
+MAX_RUN_INPUT_CHARS = 100_000
+MAX_RUNS_PER_MINUTE = 60
+_run_admission_lock = threading.Lock()
+_run_admissions: list[float] = []
+_run_limit_recorded_minute: int | None = None
+_nostoi_module = None
+
+
+class RunRateLimited(RuntimeError):
+    """Provider call refused because the local run budget is full."""
+
+
+def _admit_run(runs_dir: str | Path) -> None:
+    global _run_limit_recorded_minute
+    now = time.monotonic()
+    minute = int(time.time() // 60)
+    with _run_admission_lock:
+        while _run_admissions and now - _run_admissions[0] >= 60:
+            _run_admissions.pop(0)
+        if len(_run_admissions) >= MAX_RUNS_PER_MINUTE:
+            if _run_limit_recorded_minute != minute:
+                _append_nostoi(
+                    runs_dir, kind="skill.run.rate_limited", actor=_run_actor(),
+                    subject=f"minute:{minute}", body={"limit": MAX_RUNS_PER_MINUTE},
+                )
+                _run_limit_recorded_minute = minute
+            raise RunRateLimited("Sylvae run limit reached; try again after the current minute")
+        _run_admissions.append(now)
+
+
+def _run_actor() -> str:
+    actor = os.environ.get("SYLVAE_AGENT", "local")[:128]
+    return actor or "local"
+
+
+def _nostoi():
+    global _nostoi_module
+    if _nostoi_module is not None:
+        return _nostoi_module
+    configured = os.environ.get("SYLVAE_NOSTOI_PYTHON")
+    candidates = [Path(configured).expanduser()] if configured else []
+    candidates.extend((
+        Path(__file__).with_name("nostoi_reference.py"),
+        Path(__file__).resolve().parents[3] / "nostoi" / "contrib" / "python" / "nostoi.py",
+        Path(os.environ.get("RAGBAZ_SRC_ROOT", Path(__file__).resolve().parents[3]))
+        / "nostoi" / "contrib" / "python" / "nostoi.py",
+    ))
+    source = next((path.resolve() for path in candidates if path.is_file()), None)
+    if source is None:
+        raise RuntimeError(
+            "Nostoi's Python reference is unavailable; set SYLVAE_NOSTOI_PYTHON"
+        )
+    spec = importlib.util.spec_from_file_location("sylvae_nostoi_reference", source)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load Nostoi reference from {source}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _nostoi_module = module
+    return module
+
+
+def _append_nostoi(
+    runs_dir: str | Path, *, kind: str, actor: str, subject: str, body: dict
+) -> dict:
+    ledger = Path(os.environ.get("SYLVAE_NOSTOI_LEDGER", Path(runs_dir) / "nostoi.jsonl"))
+    ledger.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return _nostoi().append(
+        ledger, kind=kind, actor=actor, subject=subject,
+        at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), body=body,
+    )
+
 
 def resolve_input(raw: str) -> str:
     path = Path(raw)
     if path.is_file():
+        if path.stat().st_size > MAX_RUN_INPUT_CHARS:
+            raise ValueError(f"input exceeds the {MAX_RUN_INPUT_CHARS}-character run limit")
         return path.read_text()
+    if len(raw) > MAX_RUN_INPUT_CHARS:
+        raise ValueError(f"input exceeds the {MAX_RUN_INPUT_CHARS}-character run limit")
     return raw
 
 
@@ -121,12 +200,52 @@ def run_skill(
     resolved_input = resolve_input(raw_input)
     prompt = build_prompt(skill, resolved_input)
 
+    _admit_run(runs_dir)
+    actor = _run_actor()
+    intent = _append_nostoi(
+        runs_dir,
+        kind="skill.run.requested",
+        actor=actor,
+        subject=resolved_run_id,
+        body={
+            "skill": skill.slug,
+            "backend": resolved_backend_name,
+            "model": model or "",
+            "input": resolved_input,
+            "input_sha256": hashlib.sha256(resolved_input.encode("utf-8")).hexdigest(),
+            "input_chars": len(resolved_input),
+            "timeout_seconds": str(timeout) if timeout is not None else "backend-default",
+        },
+    )
+
     # Every backend accepts a timeout; passing it here is what actually
     # bounds the call. Callers that leave it None get the backend default.
     backend_kwargs = {} if timeout is None else {"timeout": timeout}
-    backend = BACKENDS[resolved_backend_name](**backend_kwargs)
-    run_kwargs = {"model": model} if model else {}
-    result = backend.run(prompt, skill, **run_kwargs)
+    try:
+        backend = BACKENDS[resolved_backend_name](**backend_kwargs)
+        run_kwargs = {"model": model} if model else {}
+        result = backend.run(prompt, skill, **run_kwargs)
+    except Exception as error:
+        _append_nostoi(
+            runs_dir, kind="skill.run.failed", actor=actor,
+            subject=resolved_run_id,
+            body={"intent_digest": intent["digest"], "error_type": type(error).__name__},
+        )
+        raise
+
+    _append_nostoi(
+        runs_dir, kind="skill.run.completed", actor=actor,
+        subject=resolved_run_id,
+        body={
+            "intent_digest": intent["digest"],
+            "status": result.status,
+            "model": result.model,
+            "duration_ms": result.duration_ms,
+            "output_sha256": hashlib.sha256(result.output.encode("utf-8")).hexdigest(),
+            "output_chars": len(result.output),
+            "error_type": type(result.error).__name__ if result.error else "",
+        },
+    )
 
     record = EvidenceRecord(
         run_id=resolved_run_id,

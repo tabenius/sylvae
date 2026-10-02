@@ -122,6 +122,34 @@ commit-bound command evidence and its producer identity.
 
 ## Review
 
+### Runtime observations, audit and human signing
+
+`sylvae system [--snapshot FILE] [--json]` shows the optional Minotaur runtime
+snapshot (default `RAGBAZ_RUNTIME_STATUS`) and evidence/signing workflow hints.
+The local review page shows the same data and serves authenticated `/api/system`.
+`/healthz` returns explicit review-server liveness without loading the run log;
+it obeys the server's existing token/loopback Host protection.
+
+Native WeftMark evidence and human review do not require Ephor. Governed holds
+in Rebekah require enabled Ephor and its authenticated Dash HITL path. Runtime
+observations cannot approve work. Web reads are not logged updates or delivery
+receipts; the pages read current files on request.
+
+With Nostoi installed, deliberately verify/sign the audit chain from a terminal:
+
+```sh
+sylvae audit --runs-dir runs verify
+sylvae audit --runs-dir runs attest --principal you@host --key ~/.ssh/id_ed25519
+sylvae audit --runs-dir runs verify-attestation --principal you@host \
+  --allowed-signers signers --fingerprint SHA256:PIN
+```
+
+The chain defaults to `runs/nostoi.jsonl`; `SYLVAE_NOSTOI_LEDGER` overrides it.
+Daily run JSONL and the audit chain are distinct records. The browser excludes
+the audit chain from run lists. Sidecar existence is not verified signing,
+signatures do not prove tests passed, and the human signing step is never run by
+a page refresh or a background agent.
+
 Browse the evidence log in a local, loopback-only web page — filter by
 skill/backend/status, expand a run to see its input/output/error — and
 trigger new runs straight from the page (pick a skill, backend, optional
