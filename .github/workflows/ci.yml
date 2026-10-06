@@ -22,6 +22,16 @@ jobs:
   test:
     timeout-minutes: 20
     runs-on: self-hosted
+    env:
+      # Sylvae's runner loads Nostoi's Python reference writer, which lives in a
+      # sibling repository rather than inside this workspace — src/sylvae/runner.py
+      # looks for it via SYLVAE_NOSTOI_PYTHON, then RAGBAZ_SRC_ROOT/nostoi/..., and
+      # raises "Nostoi's Python reference is unavailable" when neither resolves.
+      #
+      # This is a self-hosted runner, so the whole RAGBAZ tree is checked out here and
+      # one variable is enough. Overridable with a repository variable of the same name
+      # for a runner laid out differently; SYLVAE_NOSTOI_PYTHON still wins if set.
+      RAGBAZ_SRC_ROOT: ${{ vars.RAGBAZ_SRC_ROOT || '/srv/ragbaz/src/vendors/ragbaz/head' }}
     steps:
       - uses: actions/checkout@v4
 
