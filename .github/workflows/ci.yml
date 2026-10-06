@@ -1,8 +1,13 @@
 name: CI
 
 on:
+  # This said `master`, and the repository's default branch is `main` — so CI has not
+  # run on the default branch at all. Every green run in the history is a pull request
+  # or a manual dispatch, which is exactly the shape of a repository that believes its
+  # main branch is tested when nothing is testing it. A concurrency group and a timeout
+  # on a workflow that never fires is polish on a decoration.
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
