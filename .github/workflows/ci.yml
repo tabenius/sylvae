@@ -6,11 +6,16 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   test:
+    timeout-minutes: 20
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
