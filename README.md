@@ -13,9 +13,14 @@ Phase 1 goal, architecture, and rationale: see
 
 ## Setup
 
-    python -m venv .venv
-    . .venv/bin/activate
-    pip install -e ".[dev]"
+    uv sync --locked --extra dev
+    uv run --locked --extra dev pytest
+
+Use uv 0.12.19, as CI does. The committed `uv.lock` includes runtime
+dependencies and the optional `dev` and `mcp` extras. Add `--extra mcp` to
+sync when using the MCP server. `uv lock --check` verifies manifest/lock
+consistency; update deliberately with `uv lock --upgrade` and review and commit
+the resulting diff. A plain pip install does not consume this lockfile.
 
 ## Run
 
