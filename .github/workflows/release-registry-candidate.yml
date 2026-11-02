@@ -3,6 +3,7 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ['v*.*.*']
   workflow_dispatch:
 permissions:
   contents: read
@@ -40,3 +41,45 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 14
+
+  release-candidate:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: package-smoke
+    runs-on: ubuntu-24.04
+    environment: release-candidate
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: sylvae-candidate-python
+          path: release-assets
+      - name: Check semantic version agrees with package definition
+        run: |
+          python3 - <<'PY'
+          import os, tomllib
+          with open('pyproject.toml','rb') as handle:
+              config=tomllib.load(handle)
+          version=config['project']['version']
+          assert os.environ['GITHUB_REF_NAME']=='v'+version
+          PY
+      - name: Generate source-bound manifest and verify checksums
+        run: |
+          cd release-assets
+          sha256sum --check SHA256SUMS
+          cd ..
+          python scripts/create_registry_release.py sylvae multi release-assets
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign with GitHub Actions tag identity
+        run: cosign sign-blob --yes --bundle release-assets/release.sigstore.json release-assets/release.json
+      - name: Publish signed candidate artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --prerelease \
+            --title "sylvae $GITHUB_REF_NAME (candidate)" --generate-notes release-assets/*
