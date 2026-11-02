@@ -1,0 +1,22 @@
+{
+  "schema": "ragbaz.release-package/1",
+  "product": "sylvae",
+  "repository": "tabenius/sylvae",
+  "channel": "candidate",
+  "distribution": "https://ragbaz.cc/downloads/",
+  "formats": [
+    "wheel",
+    "sdist"
+  ],
+  "description": "Python skill runner; CI is not yet a release pipeline",
+  "promotion": {
+    "requiresTag": true,
+    "requiresGreenCI": true,
+    "requiresSHA256": true,
+    "requiresAttestation": true,
+    "requiresSigning": true,
+    "requiresInstalledSmoke": false,
+    "automaticStable": false
+  },
+  "releaseEligible": false
+}

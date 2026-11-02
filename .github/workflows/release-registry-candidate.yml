@@ -1,0 +1,42 @@
+name: Sylvae release artifact smoke
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build Python wheel and source distribution
+        run: |
+          python -m pip install --disable-pip-version-check 'build>=1.2,<2'
+          python -m build
+          python -m pip install --no-deps --force-reinstall dist/*.whl
+          python -c 'import sylvae; print(sylvae.__file__)'
+          python -m zipfile -l dist/*.whl >/dev/null
+          cd dist
+          sha256sum *.whl *.tar.gz > SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - name: Check registry contract
+        run: |
+          python - <<'PY'
+          import json
+          x=json.load(open('release-registry.json'))
+          assert x['schema']=='ragbaz.release-package/1'
+          assert x['product']=='sylvae'
+          assert x['promotion']['automaticStable'] is False
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sylvae-candidate-python
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
